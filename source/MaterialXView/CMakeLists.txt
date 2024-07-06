@@ -1,5 +1,7 @@
 option(MATERIALX_NANOGUI_EXTERNAL "Build aginst an external install of NanoGUI (NANOGUI_ROOT may also need to be set)" OFF)
 
+add_subdirectory(drogon)
+
 set(MATERIALXVIEW_RENDER_BACKEND_DEFINITIONS "")
 
 set(NANOGUI_PREFERRED_BACKEND OpenGL)
@@ -80,7 +82,7 @@ else()
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/NanoGUI external/NanoGUI)
     set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "External")
 
-    set(NANOGUI_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../;${CMAKE_CURRENT_SOURCE_DIR}/NanoGUI/include")
+    set(NANOGUI_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../;${CMAKE_CURRENT_SOURCE_DIR}/NanoGUI/include;${CMAKE_CURRENT_SOURCE_DIR}/drogon/lib/inc/")
     set(NANOGUI_LIBRARIES "nanogui")
 
     # Restore warnings for MaterialXView
@@ -133,7 +135,8 @@ target_link_libraries(
     MaterialXView
     ${MATERIALX_LIBRARIES}
     ${NANOGUI_LIBRARIES}
-    ${NANOGUI_EXTRA_LIBS})
+    ${NANOGUI_EXTRA_LIBS}
+    drogon)
 
 target_include_directories(
     MaterialXView

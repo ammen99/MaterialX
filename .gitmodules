@@ -7,3 +7,6 @@
 [submodule "source/MaterialXGraphEditor/External/ImGuiNodeEditor"]
 	path = source/MaterialXGraphEditor/External/ImGuiNodeEditor
 	url = https://github.com/thedmd/imgui-node-editor
+[submodule "source/MaterialXView/drogon"]
+	path = source/MaterialXView/drogon
+	url = https://github.com/drogonframework/drogon

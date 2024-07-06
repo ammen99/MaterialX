@@ -8,6 +8,7 @@
 #include <MaterialXRender/Util.h>
 #include <MaterialXFormat/Util.h>
 #include <MaterialXCore/Util.h>
+#include "Server.h"
 
 #include <iostream>
 
@@ -275,6 +276,7 @@ int main(int argc, char* const argv[])
     libraryFolders.push_back("libraries");
 
     ng::init();
+
     {
         ng::ref<Viewer> viewer = new Viewer(materialFilename,
                                             meshFilename,
@@ -320,7 +322,12 @@ int main(int argc, char* const argv[])
         {
             viewer->set_visible(true);
         }
-        ng::mainloop(refresh);
+
+        {
+            Server webServer;
+            webServer.start_server(51515);
+            ng::mainloop(refresh);
+        }
     }
     ng::shutdown();
 
