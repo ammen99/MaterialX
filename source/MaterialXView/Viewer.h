@@ -231,6 +231,8 @@ class Viewer : public ng::Screen
         _renderPipeline->bakeTextures();
     }
 
+    std::pair<std::string, std::string> getCurrentShaderSources() const;
+
   private:
     void draw_contents() override;
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;

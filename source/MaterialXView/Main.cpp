@@ -325,7 +325,7 @@ int main(int argc, char* const argv[])
 
         {
             Server webServer;
-            webServer.start_server(51515);
+            webServer.start_server(viewer, 51515);
             ng::mainloop(refresh);
         }
     }

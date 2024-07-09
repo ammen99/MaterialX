@@ -2473,3 +2473,16 @@ void Viewer::setShaderInterfaceType(mx::ShaderInterfaceType interfaceType)
     reloadShaders();
     updateDisplayedProperties();
 }
+
+std::pair<std::string, std::string> Viewer::getCurrentShaderSources() const
+{
+    if (auto material = this->getSelectedMaterial())
+    {
+        return {
+            material->getShader()->getSourceCode(mx::Stage::VERTEX),
+            material->getShader()->getSourceCode(mx::Stage::PIXEL)
+        };
+    }
+
+    return { "", "" };
+}
