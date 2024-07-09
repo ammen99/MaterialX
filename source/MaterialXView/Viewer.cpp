@@ -295,6 +295,7 @@ void Viewer::initialize()
     createLoadEnvironmentInterface(_window, "Load Environment");
     createPropertyEditorInterface(_window, "Property Editor");
     createAdvancedSettings(_window);
+    initTiming();
 
     // Create geometry selection box.
     _geomLabel = new ng::Label(_window, "Select Geometry");
@@ -331,21 +332,6 @@ void Viewer::initialize()
             assignMaterial(getSelectedGeometry(), _materials[index]);
         }
     });
-
-    // Create frame timing display
-    if (_frameTiming)
-    {
-        _timingLabel = new ng::Label(_window, "Timing");
-        _timingPanel = new ng::Widget(_window);
-        _timingPanel->set_layout(new ng::BoxLayout(ng::Orientation::Horizontal,
-                                 ng::Alignment::Middle, 0, 6));
-        new ng::Label(_timingPanel, "Frame time:");
-        _timingText = new ng::TextBox(_timingPanel);
-        _timingText->set_value("0");
-        _timingText->set_units(" ms");
-        _timingText->set_fixed_size(ng::Vector2i(80, 25));
-        _timingText->set_alignment(ng::TextBox::Alignment::Right);
-    }
 
     // Create geometry handler.
     mx::TinyObjLoaderPtr objLoader = mx::TinyObjLoader::create();
@@ -388,6 +374,24 @@ void Viewer::initialize()
     perform_layout();
 
     _turntableTimer.startTimer();
+}
+
+void Viewer::initTiming()
+{
+    // Create frame timing display
+    if (_frameTiming && _window)
+    {
+        _timingLabel = new ng::Label(_window, "Timing");
+        _timingPanel = new ng::Widget(_window);
+        _timingPanel->set_layout(new ng::BoxLayout(ng::Orientation::Horizontal,
+                                 ng::Alignment::Middle, 0, 6));
+        new ng::Label(_timingPanel, "Frame time:");
+        _timingText = new ng::TextBox(_timingPanel);
+        _timingText->set_value("0");
+        _timingText->set_units(" ms");
+        _timingText->set_fixed_size(ng::Vector2i(80, 25));
+        _timingText->set_alignment(ng::TextBox::Alignment::Right);
+    }
 }
 
 void Viewer::loadEnvironmentLight()

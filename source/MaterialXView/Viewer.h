@@ -161,6 +161,7 @@ class Viewer : public ng::Screen
     void setFrameTiming(bool enable)
     {
         _frameTiming = enable;
+        initTiming();
     }
 
     // Reset frame timing after a blocking event.
@@ -318,7 +319,7 @@ class Viewer : public ng::Screen
     void setShaderInterfaceType(mx::ShaderInterfaceType interfaceType);
 
   private:
-    ng::Window* _window;
+    ng::Window* _window = nullptr;
     RenderPipelinePtr _renderPipeline;
 
     mx::FilePath _materialFilename;
@@ -480,6 +481,8 @@ class Viewer : public ng::Screen
     ng::TextBox* _timingText;
     mx::ScopedTimer _frameTimer;
     double _avgFrameTime;
+
+    void initTiming();
 };
 
 extern const mx::Vector3 DEFAULT_CAMERA_POSITION;
