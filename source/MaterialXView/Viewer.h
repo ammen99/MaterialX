@@ -18,6 +18,8 @@
 
 
 #include <MaterialXCore/Unit.h>
+#include <mutex>
+#include <condition_variable>
 
 namespace mx = MaterialX;
 namespace ng = nanogui;
@@ -215,7 +217,8 @@ class Viewer : public ng::Screen
     // Request a capture of the current frame, writing it to the given filename.
     void requestFrameCapture(const mx::FilePath& filename)
     {
-        _captureRequested = true;
+        std::lock_guard<std::mutex> lock(_captureMutex);
+        _c_aptureRequested = true;
         _captureFilename = filename;
     }
 
@@ -319,6 +322,29 @@ class Viewer : public ng::Screen
 
     // Set shader interface type
     void setShaderInterfaceType(mx::ShaderInterfaceType interfaceType);
+
+    void unsetPendingCapture()
+    {
+        std::lock_guard<std::mutex> lock(_captureMutex);
+        _c_aptureRequested = false;
+        _captureCondition.notify_all();
+    }
+
+    bool hasPendingCaptureRequest()
+    {
+        std::lock_guard<std::mutex> lock(_captureMutex);
+        return _c_aptureRequested;
+    }
+
+  public:
+    void waitForPendingCapture()
+    {
+        std::unique_lock<std::mutex> lock(_captureMutex);
+        while (_c_aptureRequested)
+        {
+            _captureCondition.wait(lock);
+        }
+    }
 
   private:
     ng::Window* _window = nullptr;
@@ -454,8 +480,11 @@ class Viewer : public ng::Screen
     std::string _targetShader;
 
     // Frame capture
-    bool _captureRequested;
+    bool _c_aptureRequested;
     mx::FilePath _captureFilename;
+    std::mutex _captureMutex;
+    std::condition_variable _captureCondition;
+
     bool _exitRequested;
 
     // Wedge rendering

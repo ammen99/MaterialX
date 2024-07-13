@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GLFW/glfw3.h"
 #include <thread>
 #include <drogon/drogon.h>
 #include <iostream>
@@ -66,6 +67,28 @@ class Server {
                 r["fragment"] = fragment;
                 callback(drogon::HttpResponse::newHttpJsonResponse(r));
             })
+            .registerHandler("/screenshot", [viewer] (
+                    const drogon::HttpRequestPtr& _req,
+                    std::function<void (const drogon::HttpResponsePtr &)> &&callback) mutable {
+
+                auto req = _req->getJsonObject();
+
+                auto path = req->get("path", Json::Value("/tmp/default.png"));
+                double x = req->get("x", 0.0).asDouble();
+                double y = req->get("y", 0.0).asDouble();
+                double z = req->get("z", 5.0).asDouble();
+
+                ng::async([=] () mutable {
+                    viewer->setCameraTarget(mx::Vector3(x, y, z));
+                    viewer->requestFrameCapture(path.asString());
+                });
+
+                std::cout << "Pending screenshot: " << path << " x: " << x << " y: " << y << " z: " << z << " " << glfwGetTime() << std::endl;
+                viewer->waitForPendingCapture();
+                std::cout << "Screenshot taken: " << glfwGetTime() << std::endl;
+                callback(drogon::HttpResponse::newHttpResponse());
+            })
+
             .run();
     }
 

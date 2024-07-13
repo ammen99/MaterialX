@@ -212,7 +212,7 @@ Viewer::Viewer(const std::string& materialFilename,
     _showAllInputs(false),
     _flattenSubgraphs(false),
     _targetShader("standard_surface"),
-    _captureRequested(false),
+    _c_aptureRequested(false),
     _exitRequested(false),
     _wedgeRequested(false),
     _wedgePropertyName("base"),
@@ -1830,7 +1830,8 @@ bool Viewer::keyboard_event(int key, int scancode, int action, int modifiers)
             {
                 _captureFilename.addExtension(mx::ImageLoader::PNG_EXTENSION);
             }
-            _captureRequested = true;
+
+            requestFrameCapture(_captureFilename);
         }
     }
 
@@ -2069,7 +2070,7 @@ void Viewer::draw_contents()
 
     if (_turntableEnabled && _turntableSteps)
     {
-        if (!_captureRequested)
+        if (!hasPendingCaptureRequest())
         {
             const double updateTime = 1.0 / 24.0;
             if (_turntableTimer.elapsedTime() > updateTime)
@@ -2081,7 +2082,7 @@ void Viewer::draw_contents()
         }
         else
         {
-            _captureRequested = false;
+            unsetPendingCapture();
             renderTurnable();
         }
     }
@@ -2131,9 +2132,8 @@ void Viewer::draw_contents()
     }
 
     // Capture the current frame.
-    if (_captureRequested && !_turntableEnabled)
+    if (hasPendingCaptureRequest() && !_turntableEnabled)
     {
-        _captureRequested = false;
         mx::ImagePtr frameImage = _renderPipeline->getFrameImage();
         if (frameImage && _imageHandler->saveImage(_captureFilename, frameImage, true))
         {
@@ -2144,6 +2144,7 @@ void Viewer::draw_contents()
             new ng::MessageDialog(this, ng::MessageDialog::Type::Information,
                 "Failed to write frame to disk: ", _captureFilename.asString());
         }
+        unsetPendingCapture();
     }
 
     // Bake textures for the current material.
