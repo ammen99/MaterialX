@@ -779,7 +779,7 @@ void Viewer::createAdvancedSettings(Widget* parent)
             {
                 std::cerr << error << std::endl;
             }
-            new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error", e.what());
+            new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error1", e.what());
             _materialAssignments.clear();
         }
         catch (std::exception& e)
@@ -1446,7 +1446,7 @@ void Viewer::loadDocument(const mx::FilePath& filename, mx::DocumentPtr librarie
         {
             std::cerr << error << std::endl;
         }
-        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error", e.what());
+        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error2", e.what());
         _materialAssignments.clear();
     }
     catch (std::exception& e)
@@ -1479,7 +1479,7 @@ void Viewer::reloadShaders()
         {
             std::cerr << error << std::endl;
         }
-        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error", e.what());
+        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning, "Shader generation error3", e.what());
     }
     catch (std::exception& e)
     {
@@ -2473,17 +2473,4 @@ void Viewer::setShaderInterfaceType(mx::ShaderInterfaceType interfaceType)
 #endif
     reloadShaders();
     updateDisplayedProperties();
-}
-
-std::pair<std::string, std::string> Viewer::getCurrentShaderSources() const
-{
-    if (auto material = this->getSelectedMaterial())
-    {
-        return {
-            material->getShader()->getSourceCode(mx::Stage::VERTEX),
-            material->getShader()->getSourceCode(mx::Stage::PIXEL)
-        };
-    }
-
-    return { "", "" };
 }

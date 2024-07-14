@@ -18,8 +18,6 @@
 
 
 #include <MaterialXCore/Unit.h>
-#include <mutex>
-#include <condition_variable>
 
 namespace mx = MaterialX;
 namespace ng = nanogui;
@@ -79,6 +77,11 @@ class Viewer : public ng::Screen
     void setCameraPosition(const mx::Vector3& position)
     {
         _cameraPosition = position;
+    }
+
+    mx::Vector3 getCameraPosition() const
+    {
+        return _cameraPosition;
     }
 
     // Set the world-space target of the camera.
@@ -215,9 +218,9 @@ class Viewer : public ng::Screen
     }
 
     // Request a capture of the current frame, writing it to the given filename.
-    void requestFrameCapture(const mx::FilePath& filename)
+    void requestFrameCapture(const mx::FilePath& filename, std::function<void()>&& callback = [] {})
     {
-        std::lock_guard<std::mutex> lock(_captureMutex);
+        this->_captureCallback = std::move(callback);
         _c_aptureRequested = true;
         _captureFilename = filename;
     }
@@ -233,8 +236,6 @@ class Viewer : public ng::Screen
     {
         _renderPipeline->bakeTextures();
     }
-
-    std::pair<std::string, std::string> getCurrentShaderSources() const;
 
   private:
     void draw_contents() override;
@@ -325,25 +326,23 @@ class Viewer : public ng::Screen
 
     void unsetPendingCapture()
     {
-        std::lock_guard<std::mutex> lock(_captureMutex);
         _c_aptureRequested = false;
-        _captureCondition.notify_all();
+        if (_captureCallback)
+        {
+            _captureCallback();
+            _captureCallback = [] {};
+        }
     }
 
     bool hasPendingCaptureRequest()
     {
-        std::lock_guard<std::mutex> lock(_captureMutex);
         return _c_aptureRequested;
     }
 
   public:
-    void waitForPendingCapture()
+    mx::GenContext& getGenContext()
     {
-        std::unique_lock<std::mutex> lock(_captureMutex);
-        while (_c_aptureRequested)
-        {
-            _captureCondition.wait(lock);
-        }
+        return _genContext;
     }
 
   private:
@@ -482,8 +481,7 @@ class Viewer : public ng::Screen
     // Frame capture
     bool _c_aptureRequested;
     mx::FilePath _captureFilename;
-    std::mutex _captureMutex;
-    std::condition_variable _captureCondition;
+    std::function<void()> _captureCallback;
 
     bool _exitRequested;
 
