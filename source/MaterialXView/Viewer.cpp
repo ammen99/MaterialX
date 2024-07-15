@@ -255,7 +255,7 @@ Viewer::Viewer(const std::string& materialFilename,
                                 ng::metal_command_queue());
 #else
     _renderPipeline = GLRenderPipeline::create(this);
-    
+
     // Set Essl generator options
     _genContextEssl.getOptions().targetColorSpaceOverride = "lin_rec709";
     _genContextEssl.getOptions().fileTextureVerticalFlip = false;
@@ -342,7 +342,7 @@ void Viewer::initialize()
     loadMesh(_searchPath.find(_meshFilename));
 
     _renderPipeline->initFramebuffer(width(), height(), nullptr);
-    
+
     // Create environment geometry handler.
     _envGeometryHandler = mx::GeometryHandler::create();
     _envGeometryHandler->addLoader(objLoader);
@@ -998,7 +998,7 @@ void Viewer::createAdvancedSettings(Widget* parent)
     bakeDocumentPerMaterial->set_callback([this](bool enable)
     {
         _bakeDocumentPerMaterial = enable;
-    });    
+    });
 
     ng::Label* wedgeLabel = new ng::Label(advancedPopup, "Wedge Render Options (W)");
     wedgeLabel->set_font_size(20);
@@ -1305,7 +1305,7 @@ void Viewer::loadDocument(const mx::FilePath& filename, mx::DocumentPtr librarie
                     mat->setMaterialNode(materialNodes[i]);
                     mat->setUdim(udim);
                     newMaterials.push_back(mat);
-                    
+
                     udimElement = typedElem;
                 }
             }
@@ -1364,7 +1364,7 @@ void Viewer::loadDocument(const mx::FilePath& filename, mx::DocumentPtr librarie
                     mat->generateShader(_genContext);
                 }
             }
-       
+
             // Apply material assignments in the order in which they are declared within the document,
             // with later assignments superseding earlier ones.
             for (mx::LookPtr look : doc->getLooks())
@@ -2052,15 +2052,39 @@ void Viewer::renderScreenSpaceQuad(mx::MaterialPtr material)
     {
         _quadMesh = mx::GeometryHandler::createQuadMesh();
     }
-    
+
     material->bindMesh(_quadMesh);
     material->drawPartition(_quadMesh->getPartition(0));
 }
 
-void Viewer::draw_contents()
+GLuint Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
+{
+    // Resize first
+    int cur_width = this->width();
+    int cur_height = this->height();
+    this->set_size({width, height});
+    // Make sure to request redraw, so that draw_all() actually does something
+    this->redraw();
+    this->draw_all();
+
+
+    this->warmup_counter = warmup;
+    this->overdraw_counter = overdraw;
+
+    this->redraw();
+    // draw_contents() takes care of warmup and benchmarks
+    this->draw_all();
+
+    this->set_size({cur_width, cur_height});
+    this->warmup_counter = 0;
+    this->overdraw_counter = 0;
+
+    return this->last_timer_result;
+}
+
+void Viewer::_prepare_frame()
 {
     updateCameras();
-
 #ifndef MATERIALXVIEW_METAL_BACKEND
     mx::checkGlErrors("before viewer render");
 
@@ -2102,24 +2126,10 @@ void Viewer::draw_contents()
                 "Failed to write wedge to disk: ", _wedgeFilename.asString());
         }
     }
+}
 
-    // Render the current frame.
-    try
-    {
-        _renderPipeline->renderFrame(_colorTexture,
-                                     SHADOW_MAP_SIZE,
-                                     DIR_LIGHT_NODE_CATEGORY.c_str());
-    }
-    catch (std::exception& e)
-    {
-        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning,
-            "Failed to render frame: ", e.what());
-        _materialAssignments.clear();
-#ifndef MATERIALXVIEW_METAL_BACKEND
-        glDisable(GL_FRAMEBUFFER_SRGB);
-#endif
-    }
-
+void Viewer::_finish_frame()
+{
     // Update frame timing.
     if (_frameTiming)
     {
@@ -2127,7 +2137,7 @@ void Viewer::draw_contents()
         double elapsedTime = _frameTimer.elapsedTime() * 1000.0;
         double bias = (_avgFrameTime > 0.0) ? DEFAULT_SMOOTHING_BIAS : 0.0;
         _avgFrameTime = bias * _avgFrameTime + (1.0 - bias) * elapsedTime;
-        _timingText->set_value(std::to_string((int) _avgFrameTime));
+        _timingText->set_value(std::to_string((float) _avgFrameTime));
         _frameTimer.startTimer();
     }
 
@@ -2164,6 +2174,59 @@ void Viewer::draw_contents()
 #ifndef MATERIALXVIEW_METAL_BACKEND
     mx::checkGlErrors("after viewer render");
 #endif
+}
+
+void Viewer::draw_contents()
+{
+    _prepare_frame();
+
+    if (overdraw_counter <= 0) {
+        return _draw_contents_once();
+    }
+
+    if (!timerQuery.has_value()) {
+        GLuint query;
+        glGenQueries(1, &query);
+        timerQuery = query;
+    }
+
+    for (int i = 0; i < warmup_counter; i++) {
+        _draw_contents_once();
+    }
+
+    glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
+    for (int i = 0; i < overdraw_counter; i++) {
+        _draw_contents_once();
+    }
+    glEndQuery(GL_TIME_ELAPSED);
+
+    GLint available = 0;
+    while (!available) {
+        glGetQueryObjectiv(timerQuery.value(), GL_QUERY_RESULT_AVAILABLE, &available);
+    }
+
+    glGetQueryObjectui64v(timerQuery.value(), GL_QUERY_RESULT, &last_timer_result);
+    _finish_frame();
+}
+
+void Viewer::_draw_contents_once()
+{
+    // Render the current frame.
+    try
+    {
+        _renderPipeline->renderFrame(_colorTexture,
+                                     SHADOW_MAP_SIZE,
+                                     DIR_LIGHT_NODE_CATEGORY.c_str());
+    }
+    catch (std::exception& e)
+    {
+        new ng::MessageDialog(this, ng::MessageDialog::Type::Warning,
+            "Failed to render frame: ", e.what());
+        _materialAssignments.clear();
+#ifndef MATERIALXVIEW_METAL_BACKEND
+        glDisable(GL_FRAMEBUFFER_SRGB);
+#endif
+    }
 }
 
 bool Viewer::scroll_event(const ng::Vector2i& p, const ng::Vector2f& rel)

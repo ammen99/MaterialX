@@ -15,9 +15,10 @@
 #include <MaterialXRender/LightHandler.h>
 #include <MaterialXRender/ImageHandler.h>
 #include <MaterialXRender/Timer.h>
-
+#include <nanogui/opengl.h>
 
 #include <MaterialXCore/Unit.h>
+#include <optional>
 
 namespace mx = MaterialX;
 namespace ng = nanogui;
@@ -237,8 +238,18 @@ class Viewer : public ng::Screen
         _renderPipeline->bakeTextures();
     }
 
+    GLuint runBenchmark(int warmup, int overdraw, int width, int height);
+
   private:
+    int warmup_counter = 0;
+    int overdraw_counter = 0;
+    GLuint64 last_timer_result = 0;
+
     void draw_contents() override;
+    void _prepare_frame();
+    void _finish_frame();
+    void _draw_contents_once();
+
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     bool scroll_event(const ng::Vector2i& p, const ng::Vector2f& rel) override;
     bool mouse_motion_event(const ng::Vector2i& p, const ng::Vector2i& rel, int button, int modifiers) override;
@@ -511,6 +522,7 @@ class Viewer : public ng::Screen
     mx::ScopedTimer _frameTimer;
     double _avgFrameTime;
 
+    std::optional<GLuint> timerQuery;
     void initTiming();
 };
 

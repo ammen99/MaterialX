@@ -29,7 +29,7 @@ inline void write_to_tmp_file(std::string filename, std::string content) {
     file.close();
 }
 
-inline bool set_shader_from_source(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
+inline std::string set_shader_from_source(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
 {
     if (auto material = viewer->getSelectedMaterial())
     {
@@ -39,23 +39,25 @@ inline bool set_shader_from_source(ng::ref<Viewer> viewer, std::string vertex, s
         {
             try {
                 material->bindShader();
-                return true;
+                return "";
             } catch (mx::ExceptionRenderError& e) {
                 std::cout << "Failed to bind shader: " << e.what() << std::endl;
+                std::string full_error;
                 for (auto& line : e.errorLog()) {
                     std::cout << line << std::endl;
+                    full_error += line + "\n";
                 }
 
-                return false;
+                return full_error;
             }
         } else
         {
             std::cout << "Failed to load shader!" << std::endl;
-            return false;
+            return "generic error!";
         }
     } else {
         std::cout << "No material selected!" << std::endl;
-        return false;
+        return "invalid material state!";
     }
 }
 
@@ -134,14 +136,17 @@ class Server {
 
                     ng::async([=] () mutable
                     {
-                        if (set_shader_from_source(viewer, vertex, fragment))
+                        auto error = set_shader_from_source(viewer, vertex, fragment);
+                        if (error == "")
                         {
                             callback(drogon::HttpResponse::newHttpResponse());
                         } else
                         {
                             set_shader_from_source(viewer, old_vertex, old_fragment);
-                            callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                    drogon::ContentType::CT_TEXT_HTML));
+                            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
+                                    drogon::ContentType::CT_TEXT_PLAIN);
+                            resp->setBody(error);
+                            callback(resp);
                         }
                     });
                 }
@@ -175,6 +180,37 @@ class Server {
                 });
             })
 
+            .registerHandler("/metrics", [=] (
+                    const drogon::HttpRequestPtr& _req,
+                    std::function<void (const drogon::HttpResponsePtr &)> &&callback) mutable {
+
+                auto req = _req->getJsonObject();
+                if (!req) {
+                    std::cout << "Invalid request: /metrics" << std::endl;
+                    callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                            drogon::ContentType::CT_TEXT_HTML));
+                    return;
+                }
+
+                uint width = req->get("width", 1024).asUInt();
+                uint height = req->get("height", 1024).asUInt();
+                uint nr_frames = req->get("frames", 100).asInt();
+
+                if (width == 0 || height == 0 || width > 8192 || height > 8192) {
+                    std::cout << "Malformed request: " << width << " " << height << std::endl;
+                    callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::ContentType::CT_TEXT_PLAIN));
+                    return;
+                }
+
+                ng::async([=] () mutable {
+                    std::cout << "Running benchmark " << width << " " << height << " " << nr_frames << std::endl;
+                    GLuint speed = viewer->runBenchmark(1000, nr_frames, width, height);
+                    std::cout << "Results: " << speed << std::endl;
+                    Json::Value r;
+                    r["speed"] = speed;
+                    callback(drogon::HttpResponse::newHttpJsonResponse(r));
+                });
+            })
             .run();
     }
 
