@@ -100,18 +100,30 @@ class Server {
             .addListener("0.0.0.0", port)
             .setThreadNum(1)
 
+            .registerHandler("/reset", [=] (
+                    const drogon::HttpRequestPtr& req,
+                    std::function<void (const drogon::HttpResponsePtr &)> &&callback) mutable {
+                ng::async([=] () mutable {
+                    std::cout << "Reset shader!" << std::endl;
+                    viewer->getSelectedMaterial()->generateShader(viewer->getGenContext());
+                    callback(drogon::HttpResponse::newHttpResponse());
+                });
+            })
+
             .registerHandler("/getshader", [=] (
                     const drogon::HttpRequestPtr& req,
                     std::function<void (const drogon::HttpResponsePtr &)> &&callback){
 
-                Json::Value r;
-                if (auto material = viewer->getSelectedMaterial())
-                {
-                    r["vertex"] = material->getShader()->getSourceCode(mx::Stage::VERTEX);
-                    r["fragment"] = material->getShader()->getSourceCode(mx::Stage::PIXEL);
-                }
+                ng::async([=] () mutable {
+                    Json::Value r;
+                    if (auto material = viewer->getSelectedMaterial())
+                    {
+                        r["vertex"] = material->getShader()->getSourceCode(mx::Stage::VERTEX);
+                        r["fragment"] = material->getShader()->getSourceCode(mx::Stage::PIXEL);
+                    }
 
-                callback(drogon::HttpResponse::newHttpJsonResponse(r));
+                    callback(drogon::HttpResponse::newHttpJsonResponse(r));
+                });
             })
 
             .registerHandler("/setshader", [=] (
@@ -126,30 +138,32 @@ class Server {
                     return;
                 }
 
-                if (auto material = viewer->getSelectedMaterial())
+                ng::async([=] () mutable
                 {
-                    auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
-                    auto old_fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
 
-                    auto vertex = req->get("vertex", old_vertex).asString();
-                    auto fragment = req->get("fragment", old_fragment).asString();
-
-                    ng::async([=] () mutable
+                    if (auto material = viewer->getSelectedMaterial())
                     {
+                        auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
+                        auto old_fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
+
+                        auto vertex = req->get("vertex", old_vertex).asString();
+                        auto fragment = req->get("fragment", old_fragment).asString();
+
                         auto error = set_shader_from_source(viewer, vertex, fragment);
                         if (error == "")
                         {
+                            std::cout << "Successfully set shader!" << std::endl;
                             callback(drogon::HttpResponse::newHttpResponse());
                         } else
                         {
                             set_shader_from_source(viewer, old_vertex, old_fragment);
                             auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
-                                    drogon::ContentType::CT_TEXT_PLAIN);
+                                drogon::ContentType::CT_TEXT_PLAIN);
                             resp->setBody(error);
                             callback(resp);
                         }
-                    });
-                }
+                    }
+                });
             })
 
             .registerHandler("/screenshot", [viewer] (
