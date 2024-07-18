@@ -178,19 +178,19 @@ class Server {
                     return;
                 }
 
-                auto path = req->get("path", Json::Value("/tmp/default.png"));
+                auto path = req->get("path", Json::Value("/tmp/default.png")).asString();
                 double x = req->get("x", viewer->getCameraPosition()[0]).asDouble();
                 double y = req->get("y", viewer->getCameraPosition()[1]).asDouble();
                 double z = req->get("z", viewer->getCameraPosition()[2]).asDouble();
                 std::cout << "Pending screenshot: " << path << " x: " << x << " y: " << y << " z: " << z << " " << glfwGetTime() << std::endl;
 
                 ng::async([=] () mutable {
-                    sleep(5);
                     viewer->setCameraPosition(mx::Vector3(x, y, z));
-                    viewer->requestFrameCapture(path.asString(), [=] () {
-                        std::cout << "Screenshot taken: " << glfwGetTime() << std::endl;
-                        callback(drogon::HttpResponse::newHttpResponse());
-                    });
+                    viewer->requestFrameCapture(path);
+                    viewer->redraw();
+                    viewer->draw_all();
+                    std::cout << "Screenshot taken: " << glfwGetTime() << std::endl;
+                    callback(drogon::HttpResponse::newHttpResponse());
                 });
             })
 

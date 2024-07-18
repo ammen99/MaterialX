@@ -219,9 +219,8 @@ class Viewer : public ng::Screen
     }
 
     // Request a capture of the current frame, writing it to the given filename.
-    void requestFrameCapture(const mx::FilePath& filename, std::function<void()>&& callback = [] {})
+    void requestFrameCapture(const mx::FilePath& filename)
     {
-        this->_captureCallback = std::move(callback);
         _c_aptureRequested = true;
         _captureFilename = filename;
     }
@@ -338,11 +337,6 @@ class Viewer : public ng::Screen
     void unsetPendingCapture()
     {
         _c_aptureRequested = false;
-        if (_captureCallback)
-        {
-            _captureCallback();
-            _captureCallback = [] {};
-        }
     }
 
     bool hasPendingCaptureRequest()
@@ -492,7 +486,6 @@ class Viewer : public ng::Screen
     // Frame capture
     bool _c_aptureRequested;
     mx::FilePath _captureFilename;
-    std::function<void()> _captureCallback;
 
     bool _exitRequested;
 

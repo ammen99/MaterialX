@@ -2181,7 +2181,9 @@ void Viewer::draw_contents()
     _prepare_frame();
 
     if (overdraw_counter <= 0) {
-        return _draw_contents_once();
+        _draw_contents_once();
+        _finish_frame();
+        return;
     }
 
     if (!timerQuery.has_value()) {
