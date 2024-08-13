@@ -1,6 +1,6 @@
 [submodule "source/MaterialXView/NanoGUI"]
 	path = source/MaterialXView/NanoGUI
-	url = https://github.com/mitsuba-renderer/nanogui
+	url = https://github.com/ammen99/nanogui
 [submodule "source/MaterialXGraphEditor/External/ImGui"]
 	path = source/MaterialXGraphEditor/External/ImGui
 	url = https://github.com/ocornut/imgui
