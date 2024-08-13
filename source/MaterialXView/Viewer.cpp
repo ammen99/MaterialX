@@ -2180,45 +2180,13 @@ void Viewer::draw_contents()
 {
     _prepare_frame();
 
-    if (overdraw_counter <= 0) {
-        _draw_contents_once();
-        _finish_frame();
-        return;
-    }
-
-    if (!timerQuery.has_value()) {
-        GLuint query;
-        glGenQueries(1, &query);
-        timerQuery = query;
-    }
-
-    for (int i = 0; i < warmup_counter; i++) {
-        _draw_contents_once();
-    }
-
-    glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
-    for (int i = 0; i < overdraw_counter; i++) {
-        _draw_contents_once();
-    }
-    glEndQuery(GL_TIME_ELAPSED);
-
-    GLint available = 0;
-    while (!available) {
-        glGetQueryObjectiv(timerQuery.value(), GL_QUERY_RESULT_AVAILABLE, &available);
-    }
-
-    glGetQueryObjectui64v(timerQuery.value(), GL_QUERY_RESULT, &last_timer_result);
-    _finish_frame();
-}
-
-void Viewer::_draw_contents_once()
-{
     // Render the current frame.
     try
     {
-        _renderPipeline->renderFrame(_colorTexture,
+        this->last_timer_result = _renderPipeline->renderFrame(_colorTexture,
                                      SHADOW_MAP_SIZE,
-                                     DIR_LIGHT_NODE_CATEGORY.c_str());
+                                     DIR_LIGHT_NODE_CATEGORY.c_str(),
+                                     warmup_counter, overdraw_counter);
     }
     catch (std::exception& e)
     {
@@ -2229,6 +2197,8 @@ void Viewer::_draw_contents_once()
         glDisable(GL_FRAMEBUFFER_SRGB);
 #endif
     }
+
+    _finish_frame();
 }
 
 bool Viewer::scroll_event(const ng::Vector2i& p, const ng::Vector2f& rel)

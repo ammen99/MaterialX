@@ -18,7 +18,6 @@
 #include <nanogui/opengl.h>
 
 #include <MaterialXCore/Unit.h>
-#include <optional>
 
 namespace mx = MaterialX;
 namespace ng = nanogui;
@@ -247,7 +246,6 @@ class Viewer : public ng::Screen
     void draw_contents() override;
     void _prepare_frame();
     void _finish_frame();
-    void _draw_contents_once();
 
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     bool scroll_event(const ng::Vector2i& p, const ng::Vector2f& rel) override;
@@ -515,7 +513,6 @@ class Viewer : public ng::Screen
     mx::ScopedTimer _frameTimer;
     double _avgFrameTime;
 
-    std::optional<GLuint> timerQuery;
     void initTiming();
 };
 

@@ -56,6 +56,11 @@ class RenderPipeline
                                                      mx::Image::BaseType baseType) = 0;
 
     virtual void renderFrame(void* color_texture, int shadowMapSize, const char* dirLightNodeCat) = 0;
+    virtual uint64_t renderFrame(void* color_texture, int shadowMapSize, const char* dirLightNodeCat, int warmup, int benchmark)
+    {
+        renderFrame(color_texture, shadowMapSize, dirLightNodeCat);
+        return 0;
+    }
 
     virtual void initFramebuffer(int width, int height,
                                  void* color_texture) = 0;

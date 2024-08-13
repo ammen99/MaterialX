@@ -69,6 +69,7 @@ class Server {
     void start_server(ng::ref<Viewer> viewer, int port) {
         viewer->setFrameTiming(true);
         std::cout << "Starting HTTP Server..." << std::endl;
+        return;
         server_thread = std::thread([=] () {
             this->main_loop(viewer, port);
         });
@@ -137,9 +138,11 @@ class Server {
                             drogon::ContentType::CT_TEXT_HTML));
                     return;
                 }
+                std::cout << "Got request for set shader" << std::endl;
 
                 ng::async([=] () mutable
                 {
+                    std::cout << "Dispatching request for set shader" << std::endl;
 
                     if (auto material = viewer->getSelectedMaterial())
                     {
@@ -162,6 +165,12 @@ class Server {
                             resp->setBody(error);
                             callback(resp);
                         }
+                    } else {
+                        std::cout << "Missing selected material ?!?" << std::endl;
+                        auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
+                            drogon::ContentType::CT_TEXT_PLAIN);
+                        resp->setBody("unknown error");
+                        callback(resp);
                     }
                 });
             })
@@ -209,6 +218,7 @@ class Server {
                 uint width = req->get("width", 1024).asUInt();
                 uint height = req->get("height", 1024).asUInt();
                 uint nr_frames = req->get("frames", 100).asInt();
+                uint warmup = req->get("warmup-frames", 100).asInt();
 
                 if (width == 0 || height == 0 || width > 8192 || height > 8192) {
                     std::cout << "Malformed request: " << width << " " << height << std::endl;
@@ -218,7 +228,7 @@ class Server {
 
                 ng::async([=] () mutable {
                     std::cout << "Running benchmark " << width << " " << height << " " << nr_frames << std::endl;
-                    GLuint speed = viewer->runBenchmark(1000, nr_frames, width, height);
+                    GLuint speed = viewer->runBenchmark(warmup, nr_frames, width, height);
                     std::cout << "Results: " << speed << std::endl;
                     Json::Value r;
                     r["speed"] = speed;
