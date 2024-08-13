@@ -69,7 +69,6 @@ class Server {
     void start_server(ng::ref<Viewer> viewer, int port) {
         viewer->setFrameTiming(true);
         std::cout << "Starting HTTP Server..." << std::endl;
-        return;
         server_thread = std::thread([=] () {
             this->main_loop(viewer, port);
         });
