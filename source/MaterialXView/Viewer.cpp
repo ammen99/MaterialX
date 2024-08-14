@@ -2141,6 +2141,11 @@ void Viewer::_finish_frame()
         _frameTimer.startTimer();
     }
 
+    if (_wasRenderRequested)
+    {
+        this->requestedRender = _renderPipeline->getFrameImage();
+    }
+
     // Capture the current frame.
     if (hasPendingCaptureRequest() && !_turntableEnabled)
     {
@@ -2508,4 +2513,13 @@ void Viewer::setShaderInterfaceType(mx::ShaderInterfaceType interfaceType)
 #endif
     reloadShaders();
     updateDisplayedProperties();
+}
+
+mx::ImagePtr Viewer::getNextRender()
+{
+    this->_wasRenderRequested = true;
+    redraw();
+    draw_all();
+    this->_wasRenderRequested = false;
+    return std::move(this->requestedRender);
 }

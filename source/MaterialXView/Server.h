@@ -186,19 +186,26 @@ class Server {
                     return;
                 }
 
-                auto path = req->get("path", Json::Value("/tmp/default.png")).asString();
                 double x = req->get("x", viewer->getCameraPosition()[0]).asDouble();
                 double y = req->get("y", viewer->getCameraPosition()[1]).asDouble();
                 double z = req->get("z", viewer->getCameraPosition()[2]).asDouble();
-                std::cout << "Pending screenshot: " << path << " x: " << x << " y: " << y << " z: " << z << " " << glfwGetTime() << std::endl;
+                std::cout << "Pending screenshot: " << " x: " << x << " y: " << y << " z: " << z << " " << glfwGetTime() << std::endl;
 
                 ng::async([=] () mutable {
                     viewer->setCameraPosition(mx::Vector3(x, y, z));
-                    viewer->requestFrameCapture(path);
-                    viewer->redraw();
-                    viewer->draw_all();
+                    auto img = viewer->getNextRender();
+
+                    auto resp = drogon::HttpResponse::newHttpResponse();
+                    resp->setContentTypeCode(drogon::CT_CUSTOM);
+
+                    int width = img->getWidth();
+                    int height = img->getHeight();
+                    resp->addCookie("width", std::to_string(width));
+                    resp->addCookie("height", std::to_string(height));
+                    unsigned char* data = (unsigned char*)img->getResourceBuffer();
+                    resp->setBody(std::string(data, data + width * height * 3));
+                    callback(resp);
                     std::cout << "Screenshot taken: " << glfwGetTime() << std::endl;
-                    callback(drogon::HttpResponse::newHttpResponse());
                 });
             })
 
