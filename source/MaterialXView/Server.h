@@ -61,6 +61,15 @@ inline std::string set_shader_from_source(ng::ref<Viewer> viewer, std::string ve
     }
 }
 
+inline Json::Value variableToJson(std::string name, float min, float max)
+{
+    Json::Value v;
+    v["name"] = name;
+    v["min"] = min;
+    v["max"] = max;
+    return v;
+}
+
 /**
  * A simple class which encapsulates the state used for setting the shader and current material remotely.
  */
@@ -120,6 +129,34 @@ class Server {
                     {
                         r["vertex"] = material->getShader()->getSourceCode(mx::Stage::VERTEX);
                         r["fragment"] = material->getShader()->getSourceCode(mx::Stage::PIXEL);
+                    }
+
+                    callback(drogon::HttpResponse::newHttpJsonResponse(r));
+                });
+            })
+
+            .registerHandler("/getuniforms", [=] (
+                    const drogon::HttpRequestPtr& req,
+                    std::function<void (const drogon::HttpResponsePtr &)> &&callback){
+
+                ng::async([=] () mutable {
+                    Json::Value r = Json::arrayValue;
+                    r.append(variableToJson("cameraX", -3, 3));
+                    r.append(variableToJson("cameraY", -3, 3));
+                    r.append(variableToJson("cameraZ", -3, 3));
+
+                    if (auto material = viewer->getSelectedMaterial())
+                    {
+                        if (material->getPublicUniforms())
+                        {
+                            auto& uniforms = *material->getPublicUniforms();
+                            for (size_t i = 0; i < uniforms.size(); i++) {
+                                std::cout << debug(i) << std::endl;
+                                std::cout << debug(uniforms[i]->getName()) << std::endl;
+                                std::cout << debug(uniforms[i]->getType().getName()) << std::endl;
+                                r.append(variableToJson(uniforms[i]->getName(), 0, 1));
+                            }
+                        }
                     }
 
                     callback(drogon::HttpResponse::newHttpJsonResponse(r));
