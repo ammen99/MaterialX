@@ -74,12 +74,12 @@ class ServerController : public drogon::HttpController<ServerController>
 {
   public:
     METHOD_LIST_BEGIN
-    METHOD_ADD(ServerController::reset, "/reset");
-    METHOD_ADD(ServerController::getshader, "/getshader");
-    METHOD_ADD(ServerController::getuniforms, "/getuniforms");
-    METHOD_ADD(ServerController::metrics, "/metrics");
-    METHOD_ADD(ServerController::setshader, "/setshader");
-    METHOD_ADD(ServerController::screenshot, "/screenshot");
+    ADD_METHOD_TO(ServerController::reset, "/reset");
+    ADD_METHOD_TO(ServerController::getshader, "/getshader");
+    ADD_METHOD_TO(ServerController::getuniforms, "/getuniforms");
+    ADD_METHOD_TO(ServerController::metrics, "/metrics");
+    ADD_METHOD_TO(ServerController::setshader, "/setshader");
+    ADD_METHOD_TO(ServerController::screenshot, "/screenshot");
     METHOD_LIST_END
 
     void reset(const drogon::HttpRequestPtr& req,
@@ -249,6 +249,7 @@ class ServerController : public drogon::HttpController<ServerController>
     }
 
     ng::ref<Viewer> viewer;
+    ServerController(ng::ref<Viewer> viewer) : viewer(viewer) {}
 };
 
 
@@ -291,7 +292,6 @@ class Server {
             .setLogLevel(trantor::Logger::kWarn)
             .addListener("0.0.0.0", port)
             .setThreadNum(1)
-            .registerController(std::make_shared<ServerController>(viewer))
             .run();
     }
 
