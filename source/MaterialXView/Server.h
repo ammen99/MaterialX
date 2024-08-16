@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-#include <cfloat>
 #include <thread>
 #include <drogon/drogon.h>
 #include <iostream>
@@ -13,6 +12,7 @@
 #include "Viewer.h"
 #include <MaterialXGenShader/Shader.h>
 #include <MaterialXRender/ShaderRenderer.h>
+#include <MaterialXRenderGlsl/GlslMaterial.h>
 
 #include <csignal>
 #include <fstream>
@@ -28,38 +28,6 @@ inline void write_to_tmp_file(std::string filename, std::string content) {
     file.open(filename, std::ios::trunc | std::ios::ate);
     file << content;
     file.close();
-}
-
-inline std::string set_shader_from_source(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
-{
-    if (auto material = viewer->getSelectedMaterial())
-    {
-        write_to_tmp_file("/tmp/vertex.glsl", vertex);
-        write_to_tmp_file("/tmp/fragment.glsl", fragment);
-        if (material->loadSource("/tmp/vertex.glsl", "/tmp/fragment.glsl", material->hasTransparency()))
-        {
-            try {
-                material->bindShader();
-                return "";
-            } catch (mx::ExceptionRenderError& e) {
-                std::cout << "Failed to bind shader: " << e.what() << std::endl;
-                std::string full_error;
-                for (auto& line : e.errorLog()) {
-                    std::cout << line << std::endl;
-                    full_error += line + "\n";
-                }
-
-                return full_error;
-            }
-        } else
-        {
-            std::cout << "Failed to load shader!" << std::endl;
-            return "generic error!";
-        }
-    } else {
-        std::cout << "No material selected!" << std::endl;
-        return "invalid material state!";
-    }
 }
 
 inline Json::Value vecUniformToJson(std::string name, int dimensions, float min, float max)
@@ -94,12 +62,77 @@ class ServerController : public drogon::HttpController<ServerController, false>
     ADD_METHOD_TO(ServerController::screenshot, "/screenshot");
     METHOD_LIST_END
 
+    struct CachedShader {
+        std::string vertex;
+        std::string fragment;
+        mx::GlslMaterialPtr cache;
+        CachedShader() {
+            cache = mx::GlslMaterial::create();
+        }
+    };
+
+    std::array<CachedShader, 2> cachedShaders;
+    static constexpr size_t CACHE_DEFAULT = 0;
+    static constexpr size_t CACHE_TMP = 1;
+
+    std::string setShaderFromSource(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
+    {
+        auto material = viewer->getSelectedMaterial();
+        if (!material)
+        {
+            std::cout << "No material selected!" << std::endl;
+            return "invalid material state!";
+        }
+
+        for (auto& cache: cachedShaders)
+        {
+            if (cache.vertex == vertex && cache.fragment == fragment)
+            {
+                std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
+                material->copyShader(cache.cache);
+                return "";
+            }
+        }
+
+        write_to_tmp_file("/tmp/vertex.glsl", vertex);
+        write_to_tmp_file("/tmp/fragment.glsl", fragment);
+        if (material->loadSource("/tmp/vertex.glsl", "/tmp/fragment.glsl", material->hasTransparency()))
+        {
+            try {
+                material->bindShader();
+                cachedShaders[CACHE_TMP].vertex = vertex;
+                cachedShaders[CACHE_TMP].fragment = fragment;
+                cachedShaders[CACHE_TMP].cache->copyShader(material);
+                return "";
+            } catch (mx::ExceptionRenderError& e) {
+                std::cout << "Failed to bind shader: " << e.what() << std::endl;
+                std::string full_error;
+                for (auto& line : e.errorLog()) {
+                    std::cout << line << std::endl;
+                    full_error += line + "\n";
+                }
+
+                return full_error;
+            }
+        } else
+        {
+            std::cout << "Failed to load shader!" << std::endl;
+            return "generic error!";
+        }
+    }
+
     void reset(const drogon::HttpRequestPtr& req,
         std::function<void (const drogon::HttpResponsePtr &)> &&callback)
     {
         ng::async([=] () mutable {
             std::cout << "Reset shader!" << std::endl;
-            viewer->getSelectedMaterial()->generateShader(viewer->getGenContext());
+            auto material = viewer->getSelectedMaterial();
+            material->generateShader(viewer->getGenContext());
+            material->bindShader();
+
+            cachedShaders[CACHE_DEFAULT].cache->copyShader(material);
+            cachedShaders[CACHE_DEFAULT].vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
+            cachedShaders[CACHE_DEFAULT].fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
             callback(drogon::HttpResponse::newHttpResponse());
         });
     }
@@ -310,14 +343,14 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 auto vertex = req->get("vertex", old_vertex).asString();
                 auto fragment = req->get("fragment", old_fragment).asString();
 
-                auto error = set_shader_from_source(viewer, vertex, fragment);
+                auto error = setShaderFromSource(viewer, vertex, fragment);
                 if (error == "")
                 {
                     std::cout << "Successfully set shader!" << std::endl;
                     callback(drogon::HttpResponse::newHttpResponse());
                 } else
                 {
-                    set_shader_from_source(viewer, old_vertex, old_fragment);
+                    setShaderFromSource(viewer, old_vertex, old_fragment);
                     auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
                         drogon::ContentType::CT_TEXT_PLAIN);
                     resp->setBody(error);

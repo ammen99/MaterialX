@@ -4,7 +4,6 @@
 //
 
 #include <MaterialXView/Editor.h>
-
 #include <MaterialXView/Viewer.h>
 
 #include <nanogui/colorwheel.h>
