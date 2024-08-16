@@ -88,6 +88,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
     ADD_METHOD_TO(ServerController::reset, "/reset");
     ADD_METHOD_TO(ServerController::getshader, "/getshader");
     ADD_METHOD_TO(ServerController::getuniforms, "/getuniforms");
+    ADD_METHOD_TO(ServerController::setuniforms, "/setuniforms");
     ADD_METHOD_TO(ServerController::metrics, "/metrics");
     ADD_METHOD_TO(ServerController::setshader, "/setshader");
     ADD_METHOD_TO(ServerController::screenshot, "/screenshot");
@@ -124,8 +125,9 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         if (value->getTypeString() == "float")
         {
-            float min = FLT_MIN;
-            float max = FLT_MAX;
+            // TODO: is this meaningful?
+            float min = -10;
+            float max = 10;
             if (item.ui.uiMin)
                 min = item.ui.uiMin->asA<float>();
             if (item.ui.uiMax)
@@ -147,11 +149,52 @@ class ServerController : public drogon::HttpController<ServerController, false>
         std::cout << debug(item.variable->getPath()) _ debug(value->getTypeString()) << std::endl;
     }
 
+    std::optional<std::string> setValue(mx::MaterialPtr material, Json::Value& uniformValue, mx::ShaderPort *uniform)
+    {
+        auto path = uniformValue["name"].asString();
+        auto value = uniformValue["value"];
+
+        if (uniform->getValue()->getTypeString() == "float")
+        {
+            if (!value.isArray() || value.size() != 1 || !value[0].isDouble())
+            {
+                return "Invalid float value for " + path;
+            }
+
+            material->modifyUniform(path, mx::Value::createValue(float(value[0].asDouble())));
+        }
+        else if (uniform->getValue()->getTypeString() == "color3")
+        {
+            if (!value.isArray() || value.size() != 3 || !value[0].isDouble() || !value[1].isDouble() || !value[2].isDouble())
+            {
+                return "Invalid color value for " + path;
+            }
+
+            material->modifyUniform(path, mx::Value::createValue(
+                    mx::Color3(value[0].asDouble(), value[1].asDouble(), value[2].asDouble())));
+        }
+        else if (uniform->getValue()->getTypeString() == "boolean")
+        {
+            if (!value.isBool())
+            {
+                return "Invalid boolean value for " + path;
+            }
+
+            material->modifyUniform(path, mx::Value::createValue(value.asBool()));
+        } else
+        {
+            std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Unknown type for set: " << uniform->getValue()->getTypeString() << std::endl;
+        }
+
+        return {};
+    }
+
     void getuniforms(const drogon::HttpRequestPtr& req,
         std::function<void (const drogon::HttpResponsePtr &)> &&callback)
     {
         ng::async([this, callback] () mutable {
             Json::Value r = Json::arrayValue;
+
             r.append(vecUniformToJson("camera", 3, -5, 5));
 
             if (auto material = viewer->getSelectedMaterial())
@@ -181,10 +224,71 @@ class ServerController : public drogon::HttpController<ServerController, false>
         });
     }
 
+    void setuniforms(const drogon::HttpRequestPtr& _req,
+        std::function<void (const drogon::HttpResponsePtr &)> &&callback)
+    {
+        auto req = _req->getJsonObject();
+        if (!req || !req->isArray()) {
+            std::cout << "Invalid request: /setuniforms: expected json array" << std::endl;
+            callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                    drogon::ContentType::CT_TEXT_HTML));
+            return;
+        }
+
+        ng::async([this, callback, req] () mutable {
+            for (auto it = req->begin(); it != req->end(); it++) {
+                auto uniformValue = *it;
+                if (!uniformValue.isObject() ||
+                    !uniformValue.isMember("name") || !uniformValue["name"].isString() ||
+                    !uniformValue.isMember("value"))
+                {
+                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                            drogon::ContentType::CT_TEXT_HTML);
+                    resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
+                    callback(resp);
+                    return;
+                }
+
+                auto name = uniformValue["name"].asString();
+                if (auto material = viewer->getSelectedMaterial())
+                {
+                    if (name == "camera")
+                    {
+                        if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 3
+                            || !uniformValue["value"][0].isDouble() || !uniformValue["value"][1].isDouble() || !uniformValue["value"][2].isDouble())
+                        {
+                            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                    drogon::ContentType::CT_TEXT_HTML);
+                            resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
+                            callback(resp);
+                            return;
+                        }
+
+                        viewer->setCameraPosition(mx::Vector3(
+                                uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
+                    }
+
+                    if (auto uniform = material->findUniform(name))
+                    {
+                        if (auto err = setValue(material, uniformValue, uniform))
+                        {
+                            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                    drogon::ContentType::CT_TEXT_HTML);
+                            resp->setBody(err.value());
+                            callback(resp);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            callback(drogon::HttpResponse::newHttpResponse());
+        });
+    }
+
     void setshader(const drogon::HttpRequestPtr& _req,
         std::function<void (const drogon::HttpResponsePtr &)> &&callback)
     {
-
         auto req = _req->getJsonObject();
         if (!req) {
             std::cout << "Invalid request: /setshader" << std::endl;
