@@ -30,7 +30,7 @@ inline void write_to_tmp_file(std::string filename, std::string content) {
     file.close();
 }
 
-inline Json::Value vecUniformToJson(std::string name, int dimensions, float min, float max)
+inline Json::Value vecUniformToJson(std::string name, int dimensions, float min, float max, std::string hint)
 {
     Json::Value v;
     v["name"] = name;
@@ -38,6 +38,7 @@ inline Json::Value vecUniformToJson(std::string name, int dimensions, float min,
     v["dimensions"] = dimensions;
     v["min"] = min;
     v["max"] = max;
+    v["hint"] = hint;
     return v;
 }
 
@@ -165,11 +166,11 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 min = item.ui.uiMin->asA<float>();
             if (item.ui.uiMax)
                 max = item.ui.uiMax->asA<float>();
-            list.append(vecUniformToJson(item.variable->getPath(), 1, min, max));
+            list.append(vecUniformToJson(item.variable->getPath(), 1, min, max, "float"));
         }
         else if (value->getTypeString() == "color3")
         {
-            list.append(vecUniformToJson(item.variable->getPath(), 3, 0, 1));
+            list.append(vecUniformToJson(item.variable->getPath(), 3, 0, 1, "color3"));
         }
         else if (value->getTypeString() == "boolean")
         {
@@ -228,7 +229,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         ng::async([this, callback] () mutable {
             Json::Value r = Json::arrayValue;
 
-            r.append(vecUniformToJson("camera", 3, -5, 5));
+            r.append(vecUniformToJson("camera", 3, -5, 5, "camera"));
 
             if (auto material = viewer->getSelectedMaterial())
             {
