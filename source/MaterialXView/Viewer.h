@@ -238,7 +238,7 @@ class Viewer : public ng::Screen
 
     GLuint runBenchmark(int warmup, int overdraw, int width, int height);
 
-    mx::ImagePtr getNextRender();
+    mx::ImagePtr getNextRender(int width, int height);
 
   private:
     int warmup_counter = 0;

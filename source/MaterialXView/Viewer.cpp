@@ -2515,11 +2515,20 @@ void Viewer::setShaderInterfaceType(mx::ShaderInterfaceType interfaceType)
     updateDisplayedProperties();
 }
 
-mx::ImagePtr Viewer::getNextRender()
+mx::ImagePtr Viewer::getNextRender(int width, int height)
 {
+    int cur_w = this->width();
+    int cur_h = this->height();
+
+    this->set_size({width, height});
+    redraw();
+    draw_all();
+
     this->_wasRenderRequested = true;
     redraw();
     draw_all();
     this->_wasRenderRequested = false;
+
+    this->set_size({cur_w, cur_h});
     return std::move(this->requestedRender);
 }

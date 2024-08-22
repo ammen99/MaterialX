@@ -378,14 +378,12 @@ class ServerController : public drogon::HttpController<ServerController, false>
             return;
         }
 
-        double x = req->get("x", viewer->getCameraPosition()[0]).asDouble();
-        double y = req->get("y", viewer->getCameraPosition()[1]).asDouble();
-        double z = req->get("z", viewer->getCameraPosition()[2]).asDouble();
-        std::cout << "Pending screenshot: " << " x: " << x << " y: " << y << " z: " << z << " " << glfwGetTime() << std::endl;
+        int w = req->get("width", viewer->width()).asInt();
+        int h = req->get("height", viewer->height()).asInt();
+        std::cout << "Pending screenshot: " << " width=" << w << " height=" << h << " " << glfwGetTime() << std::endl;
 
         ng::async([=] () mutable {
-            viewer->setCameraPosition(mx::Vector3(x, y, z));
-            auto img = viewer->getNextRender();
+            auto img = viewer->getNextRender(w, h);
 
             auto resp = drogon::HttpResponse::newHttpResponse();
             resp->setContentTypeCode(drogon::CT_CUSTOM);
