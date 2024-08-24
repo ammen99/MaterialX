@@ -2058,16 +2058,24 @@ void Viewer::renderScreenSpaceQuad(mx::MaterialPtr material)
     material->drawPartition(_quadMesh->getPartition(0));
 }
 
+nanogui::Vector2i getSize(GLFWwindow *window)
+{
+    int width;
+    int height;
+    glfwGetFramebufferSize(window, &width, &height);
+    return nanogui::Vector2i(width, height);
+}
+
 GLuint Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
 {
     // Resize first
-    int cur_width = this->width();
-    int cur_height = this->height();
-    this->set_size({width, height});
-    // Make sure to request redraw, so that draw_all() actually does something
-    this->redraw();
-    this->draw_all();
-
+    while (getSize(m_glfw_window) != nanogui::Vector2i(width, height)) {
+        this->set_size({width, height});
+        // Make sure to request redraw, so that draw_all() actually does something
+        this->redraw();
+        this->draw_all();
+        usleep(1000);
+    }
 
     this->warmup_counter = warmup;
     this->overdraw_counter = overdraw;
@@ -2076,7 +2084,6 @@ GLuint Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
     // draw_contents() takes care of warmup and benchmarks
     this->draw_all();
 
-    this->set_size({cur_width, cur_height});
     this->warmup_counter = 0;
     this->overdraw_counter = 0;
 
@@ -2520,19 +2527,15 @@ void Viewer::setShaderInterfaceType(mx::ShaderInterfaceType interfaceType)
 
 mx::ImagePtr Viewer::getNextRender(int width, int height)
 {
-    int cur_w = this->width();
-    int cur_h = this->height();
-
-    this->set_size({width, height});
     this->requestedRenderResolution = {width, height};
 
     // Wait for GLFW to resize the window to the appropriate size
     while (this->requestedRenderResolution.has_value()) {
+        this->set_size({width, height});
         redraw();
         draw_all();
-        usleep(10000);
+        usleep(1000);
     }
 
-    this->set_size({cur_w, cur_h});
     return std::move(this->requestedRender);
 }
