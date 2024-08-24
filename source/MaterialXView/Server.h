@@ -422,6 +422,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
             int width = img->getWidth();
             int height = img->getHeight();
+
+            std::cout << "Requested " << w << "x" << h << " got " << img->getWidth() << "x" << img->getHeight() << std::endl;
+
+
             resp->addCookie("width", std::to_string(width));
             resp->addCookie("height", std::to_string(height));
             unsigned char* data = (unsigned char*)img->getResourceBuffer();
