@@ -17,6 +17,7 @@ NANOGUI_FORCE_DISCRETE_GPU();
 const std::string options =
     " Options: \n"
     "    --material [FILENAME]          Specify the filename of the MTLX document to be displayed in the viewer\n"
+    "    --port [INTEGER]               Specify the port for the HTTP server receiving commands\n"
     "    --mesh [FILENAME]              Specify the filename of the OBJ mesh to be displayed in the viewer\n"
     "    --meshRotation [VECTOR3]       Specify the rotation of the displayed mesh as three comma-separated floats, representing rotations in degrees about the X, Y, and Z axes (defaults to 0,0,0)\n"
     "    --meshScale [FLOAT]            Specify the uniform scale of the displayed mesh\n"
@@ -104,6 +105,7 @@ int main(int argc, char* const argv[])
     std::string bakeFilename;
     float refresh = 50.0f;
     bool frameTiming = false;
+    int serverPort = 51515;
 
     for (size_t i = 0; i < tokens.size(); i++)
     {
@@ -112,6 +114,10 @@ int main(int argc, char* const argv[])
         if (token == "--material")
         {
             materialFilename = nextToken;
+        }
+        else if (token == "--port")
+        {
+            parseToken(nextToken, "integer", serverPort);
         }
         else if (token == "--mesh")
         {
@@ -325,7 +331,7 @@ int main(int argc, char* const argv[])
 
         {
             Server webServer;
-            webServer.start_server(viewer, 51515);
+            webServer.start_server(viewer, serverPort);
             ng::mainloop(refresh);
         }
     }
