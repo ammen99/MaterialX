@@ -5,6 +5,7 @@
 
 #include <MaterialXView/Viewer.h>
 #include <MaterialXView/RenderPipeline.h>
+#include <unistd.h>
 
 #ifdef MATERIALXVIEW_METAL_BACKEND
 #include <MaterialXView/RenderPipelineMetal.h>
@@ -2141,9 +2142,11 @@ void Viewer::_finish_frame()
         _frameTimer.startTimer();
     }
 
-    if (_wasRenderRequested)
-    {
-        this->requestedRender = _renderPipeline->getFrameImage();
+    if (requestedRenderResolution.has_value()) {
+        if (this->size() == requestedRenderResolution.value()) {
+            requestedRenderResolution.reset();
+            this->requestedRender = _renderPipeline->getFrameImage();
+        }
     }
 
     // Capture the current frame.
@@ -2521,13 +2524,14 @@ mx::ImagePtr Viewer::getNextRender(int width, int height)
     int cur_h = this->height();
 
     this->set_size({width, height});
-    redraw();
-    draw_all();
+    this->requestedRenderResolution = {width, height};
 
-    this->_wasRenderRequested = true;
-    redraw();
-    draw_all();
-    this->_wasRenderRequested = false;
+    // Wait for GLFW to resize the window to the appropriate size
+    while (this->requestedRenderResolution.has_value()) {
+        redraw();
+        draw_all();
+        usleep(10000);
+    }
 
     this->set_size({cur_w, cur_h});
     return std::move(this->requestedRender);

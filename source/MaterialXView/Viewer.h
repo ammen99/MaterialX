@@ -18,6 +18,7 @@
 #include <nanogui/opengl.h>
 
 #include <MaterialXCore/Unit.h>
+#include <optional>
 
 namespace mx = MaterialX;
 namespace ng = nanogui;
@@ -249,7 +250,7 @@ class Viewer : public ng::Screen
     int overdraw_counter = 0;
     GLuint64 last_timer_result = 0;
 
-    bool _wasRenderRequested = false;
+    std::optional<nanogui::Vector2i> requestedRenderResolution;
     mx::ImagePtr requestedRender = nullptr;
 
     void draw_contents() override;
