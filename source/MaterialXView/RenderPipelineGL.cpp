@@ -407,6 +407,33 @@ uint64_t GLRenderPipeline::renderFrame(void*, int shadowMapSize, const char* dir
         glCullFace(GL_BACK);
     }
 
+    const auto& benchmarkGeometry = [&] (mx::GlslMaterialPtr material, mx::MeshPartitionPtr geom) -> GLuint64 {
+        if (benchmarkFrames > 0) {
+            glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
+            for (int i = 0; i < warmupFrames; i++) {
+                material->drawPartition(geom);
+            } for (int i = 0; i < benchmarkFrames; i++) {
+                material->drawPartition(geom);
+            }
+
+            glEndQuery(GL_TIME_ELAPSED);
+
+            GLint available = 0;
+            while (!available) {
+                glGetQueryObjectiv(timerQuery.value(), GL_QUERY_RESULT_AVAILABLE, &available);
+            }
+
+            GLuint64 last_timer_result = 0;
+            glGetQueryObjectui64v(timerQuery.value(), GL_QUERY_RESULT, &last_timer_result);
+            return last_timer_result;
+        } else {
+            material->drawPartition(geom);
+            return 0;
+        }
+    };
+
+    GLuint64 totalRenderTime = 0;
+
     // Opaque pass
     for (const auto& assignment : _viewer->_materialAssignments)
     {
@@ -427,19 +454,7 @@ uint64_t GLRenderPipeline::renderFrame(void*, int shadowMapSize, const char* dir
         material->bindViewInformation(viewCamera);
         material->bindLighting(lightHandler, imageHandler, shadowState);
         material->bindImages(imageHandler, searchPath);
-
-        if (benchmarkFrames > 0) {
-            glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
-            for (int i = 0; i < warmupFrames; i++) {
-                material->drawPartition(geom);
-            } for (int i = 0; i < benchmarkFrames; i++) {
-                material->drawPartition(geom);
-            }
-
-            glEndQuery(GL_TIME_ELAPSED);
-        } else {
-            material->drawPartition(geom);
-        }
+        totalRenderTime += benchmarkGeometry(material, geom);
         material->unbindImages(imageHandler);
     }
 
@@ -467,7 +482,7 @@ uint64_t GLRenderPipeline::renderFrame(void*, int shadowMapSize, const char* dir
             material->bindViewInformation(viewCamera);
             material->bindLighting(lightHandler, imageHandler, shadowState);
             material->bindImages(imageHandler, searchPath);
-            material->drawPartition(geom);
+            totalRenderTime += benchmarkGeometry(material, geom);
             material->unbindImages(imageHandler);
         }
         glDisable(GL_BLEND);
@@ -498,18 +513,7 @@ uint64_t GLRenderPipeline::renderFrame(void*, int shadowMapSize, const char* dir
         }
     }
 
-    if (benchmarkFrames > 0) {
-        GLint available = 0;
-        while (!available) {
-            glGetQueryObjectiv(timerQuery.value(), GL_QUERY_RESULT_AVAILABLE, &available);
-        }
-
-        GLuint64 last_timer_result = 0;
-        glGetQueryObjectui64v(timerQuery.value(), GL_QUERY_RESULT, &last_timer_result);
-        return last_timer_result;
-    }
-
-    return 0;
+    return totalRenderTime;
 }
 
 void GLRenderPipeline::bakeTextures()

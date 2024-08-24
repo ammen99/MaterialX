@@ -76,9 +76,34 @@ class ServerController : public drogon::HttpController<ServerController, false>
     static constexpr size_t CACHE_DEFAULT = 0;
     static constexpr size_t CACHE_TMP = 1;
 
+    void storeProgramInCache(mx::GlslMaterialPtr material, size_t idx,
+        std::string vertex = "", std::string fragment = "")
+    {
+        if (vertex == "") {
+            vertex = material->getProgram()->getShader()->getSourceCode(mx::Stage::VERTEX);
+        }
+
+        if (fragment == "") {
+            fragment = material->getProgram()->getShader()->getSourceCode(mx::Stage::PIXEL);
+        }
+
+        std::cout << "Storing " << (idx == CACHE_DEFAULT ? "default" : "tmp") << " " << vertex.length() << " " << fragment.length() << std::endl;
+
+        cachedShaders[idx].vertex = vertex;
+        cachedShaders[idx].fragment = fragment;
+        cachedShaders[idx].cache->copyShader(material);
+    }
+
+    void setProgramFromCache(mx::GlslMaterialPtr material, CachedShader *shader)
+    {
+        std::cout << "Reusing cache entry " << (shader == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
+        material->copyShader(shader->cache);
+        viewer->assignMaterial(viewer->getSelectedGeometry(), material);
+    }
+
     std::string setShaderFromSource(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
     {
-        auto material = viewer->getSelectedMaterial();
+        auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
         if (!material)
         {
             std::cout << "No material selected!" << std::endl;
@@ -89,8 +114,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         {
             if (cache.vertex == vertex && cache.fragment == fragment)
             {
-                std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
-                material->copyShader(cache.cache);
+                setProgramFromCache(material, &cache);
                 return "";
             }
         }
@@ -101,9 +125,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         {
             try {
                 material->bindShader();
-                cachedShaders[CACHE_TMP].vertex = vertex;
-                cachedShaders[CACHE_TMP].fragment = fragment;
-                cachedShaders[CACHE_TMP].cache->copyShader(material);
+                storeProgramInCache(material, CACHE_TMP, vertex, fragment);
                 return "";
             } catch (mx::ExceptionRenderError& e) {
                 std::cout << "Failed to bind shader: " << e.what() << std::endl;
@@ -127,13 +149,17 @@ class ServerController : public drogon::HttpController<ServerController, false>
     {
         ng::async([=] () mutable {
             std::cout << "Reset shader!" << std::endl;
-            auto material = viewer->getSelectedMaterial();
-            material->generateShader(viewer->getGenContext());
-            material->bindShader();
 
-            cachedShaders[CACHE_DEFAULT].cache->copyShader(material);
-            cachedShaders[CACHE_DEFAULT].vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
-            cachedShaders[CACHE_DEFAULT].fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
+            auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
+            //if (cachedShaders[CACHE_DEFAULT].vertex.empty()) {
+                material->generateShader(viewer->getGenContext());
+                material->bindShader();
+                std::cout << "generating anew " << material->hasTransparency() << std::endl;
+                storeProgramInCache(material, CACHE_DEFAULT);
+            //} else {
+            //    setProgramFromCache(material, &cachedShaders[CACHE_DEFAULT]);
+            //}
+
             callback(drogon::HttpResponse::newHttpResponse());
         });
     }
@@ -270,6 +296,13 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
 
         ng::async([this, callback, req] () mutable {
+            auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
+            if (!material)
+            {
+                return;
+            }
+
+
             for (auto it = req->begin(); it != req->end(); it++) {
                 auto uniformValue = *it;
                 if (!uniformValue.isObject() ||
@@ -284,38 +317,37 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 }
 
                 auto name = uniformValue["name"].asString();
-                if (auto material = viewer->getSelectedMaterial())
+                if (name == "camera")
                 {
-                    if (name == "camera")
+                    if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 3
+                        || !uniformValue["value"][0].isDouble() || !uniformValue["value"][1].isDouble() || !uniformValue["value"][2].isDouble())
                     {
-                        if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 3
-                            || !uniformValue["value"][0].isDouble() || !uniformValue["value"][1].isDouble() || !uniformValue["value"][2].isDouble())
-                        {
-                            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                    drogon::ContentType::CT_TEXT_HTML);
-                            resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
-                            callback(resp);
-                            return;
-                        }
-
-                        viewer->setCameraPosition(mx::Vector3(
-                                uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
+                        auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                drogon::ContentType::CT_TEXT_HTML);
+                        resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
+                        callback(resp);
+                        return;
                     }
 
-                    if (auto uniform = material->findUniform(name))
+                    viewer->setCameraPosition(mx::Vector3(
+                            uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
+                }
+
+                if (auto uniform = material->findUniform(name))
+                {
+                    if (auto err = setValue(material, uniformValue, uniform))
                     {
-                        if (auto err = setValue(material, uniformValue, uniform))
-                        {
-                            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                    drogon::ContentType::CT_TEXT_HTML);
-                            resp->setBody(err.value());
-                            callback(resp);
-                            return;
-                        }
+                        auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                drogon::ContentType::CT_TEXT_HTML);
+                        resp->setBody(err.value());
+                        callback(resp);
+                        return;
                     }
                 }
             }
 
+            std::dynamic_pointer_cast<mx::GlslMaterial>(material)->updateTransparency(viewer->getGenContext());
+            std::cout << "Material now has transparency $$$$$$$$$$$$$$$$$$ " << material->hasTransparency() << std::endl;
             callback(drogon::HttpResponse::newHttpResponse());
         });
     }

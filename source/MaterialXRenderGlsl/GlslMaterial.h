@@ -54,6 +54,8 @@ class MX_RENDERGLSL_API GlslMaterial : public ShaderMaterial
         _glProgram = std::static_pointer_cast<GlslMaterial>(material)->_glProgram;
     }
 
+    void updateTransparency(GenContext& context);
+
     /// Return the underlying GLSL program.
     GlslProgramPtr getProgram() const
     {

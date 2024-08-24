@@ -60,11 +60,10 @@ bool GlslMaterial::generateShader(GenContext& context)
     {
         return false;
     }
-
-    _hasTransparency = isTransparentSurface(_elem, context.getShaderGenerator().getTarget());
+    updateTransparency(context);
 
     GenContext materialContext = context;
-    materialContext.getOptions().hwTransparency = _hasTransparency;
+    materialContext.getOptions().hwTransparency = true;
 
     // Initialize in case creation fails and throws an exception
     clearShader();
@@ -374,6 +373,11 @@ void GlslMaterial::modifyUniform(const std::string& path, ConstValuePtr value, s
             }
         }
     }
+}
+
+void GlslMaterial::updateTransparency(GenContext& context)
+{
+    _hasTransparency = isTransparentSurface(_elem, context.getShaderGenerator().getTarget());
 }
 
 MATERIALX_NAMESPACE_END

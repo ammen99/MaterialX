@@ -240,6 +240,10 @@ class Viewer : public ng::Screen
 
     mx::ImagePtr getNextRender(int width, int height);
 
+    // Assign the given material to the given geometry, or remove any
+    // existing assignment if the given material is nullptr.
+    void assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material);
+
   private:
     int warmup_counter = 0;
     int overdraw_counter = 0;
@@ -273,10 +277,6 @@ class Viewer : public ng::Screen
     
     // Translate the current material to the target shading model.
     mx::DocumentPtr translateMaterial();
-
-    // Assign the given material to the given geometry, or remove any
-    // existing assignment if the given material is nullptr.
-    void assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material);
 
     // Mark the given material as currently selected in the viewer.
     void setSelectedMaterial(mx::MaterialPtr material)
@@ -353,6 +353,9 @@ class Viewer : public ng::Screen
         return _genContext;
     }
 
+    // Material assignments
+    std::map<mx::MeshPartitionPtr, mx::MaterialPtr> _materialAssignments;
+
   private:
     ng::Window* _window = nullptr;
     RenderPipelinePtr _renderPipeline;
@@ -426,9 +429,6 @@ class Viewer : public ng::Screen
     ng::Label* _materialLabel;
     ng::ComboBox* _materialSelectionBox;
     PropertyEditor _propertyEditor;
-
-    // Material assignments
-    std::map<mx::MeshPartitionPtr, mx::MaterialPtr> _materialAssignments;
 
     // Cameras
     mx::CameraPtr _identityCamera;
