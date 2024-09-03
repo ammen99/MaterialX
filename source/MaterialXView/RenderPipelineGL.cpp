@@ -409,13 +409,14 @@ uint64_t GLRenderPipeline::renderFrame(void*, int shadowMapSize, const char* dir
 
     const auto& benchmarkGeometry = [&] (mx::GlslMaterialPtr material, mx::MeshPartitionPtr geom) -> GLuint64 {
         if (benchmarkFrames > 0) {
-            glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
             for (int i = 0; i < warmupFrames; i++) {
-                material->drawPartition(geom);
-            } for (int i = 0; i < benchmarkFrames; i++) {
                 material->drawPartition(geom);
             }
 
+            glBeginQuery(GL_TIME_ELAPSED, timerQuery.value());
+            for (int i = 0; i < benchmarkFrames; i++) {
+                material->drawPartition(geom);
+            }
             glEndQuery(GL_TIME_ELAPSED);
 
             GLint available = 0;
