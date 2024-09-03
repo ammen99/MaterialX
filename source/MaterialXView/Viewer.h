@@ -243,7 +243,7 @@ class Viewer : public ng::Screen
 
     // Assign the given material to the given geometry, or remove any
     // existing assignment if the given material is nullptr.
-    void assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material);
+    void assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material, bool updateProperties = true);
 
   private:
     int warmup_counter = 0;

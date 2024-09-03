@@ -98,7 +98,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
     {
         std::cout << "Reusing cache entry " << (shader == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
         material->copyShader(shader->cache);
-        viewer->assignMaterial(viewer->getSelectedGeometry(), material);
+        viewer->assignMaterial(viewer->getSelectedGeometry(), material, false);
     }
 
     std::string setShaderFromSource(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)

@@ -511,7 +511,7 @@ void Viewer::applyDirectLights(mx::DocumentPtr doc)
     }
 }
 
-void Viewer::assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material)
+void Viewer::assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material, bool updateProperties)
 {
     if (!geometry || _geometryHandler->getMeshes().empty())
     {
@@ -521,7 +521,7 @@ void Viewer::assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr mater
     if (geometry == getSelectedGeometry())
     {
         setSelectedMaterial(material);
-        if (material)
+        if (material && updateProperties)
         {
             updateDisplayedProperties();
         }
