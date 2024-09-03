@@ -72,9 +72,9 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
     };
 
-    std::array<CachedShader, 2> cachedShaders;
+    std::array<CachedShader, 3> cachedShaders;
     static constexpr size_t CACHE_DEFAULT = 0;
-    static constexpr size_t CACHE_TMP = 1;
+    size_t next_tmp_cache = 1;
 
     void storeProgramInCache(mx::GlslMaterialPtr material, size_t idx,
         std::string vertex = "", std::string fragment = "")
@@ -92,6 +92,11 @@ class ServerController : public drogon::HttpController<ServerController, false>
         cachedShaders[idx].vertex = vertex;
         cachedShaders[idx].fragment = fragment;
         cachedShaders[idx].cache->copyShader(material);
+
+        if (idx != CACHE_DEFAULT) {
+            // toggle between indices 1 and 2
+            next_tmp_cache = 3 - next_tmp_cache;
+        }
     }
 
     void setProgramFromCache(mx::GlslMaterialPtr material, CachedShader *shader)
@@ -125,7 +130,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         {
             try {
                 material->bindShader();
-                storeProgramInCache(material, CACHE_TMP, vertex, fragment);
+                storeProgramInCache(material, next_tmp_cache, vertex, fragment);
                 return "";
             } catch (mx::ExceptionRenderError& e) {
                 std::cout << "Failed to bind shader: " << e.what() << std::endl;
