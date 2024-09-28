@@ -36,6 +36,10 @@ class MX_RENDERGLSL_API GlslMaterial : public ShaderMaterial
     }
 
     /// Load shader source from file.
+    bool compileShaders(const std::string& vertexShader,
+                    const std::string& pixelShader, bool hasTransparency);
+
+    /// Load shader source from file.
     bool loadSource(const FilePath& vertexShaderFile,
                     const FilePath& pixelShaderFile,
                     bool hasTransparency) override;
@@ -110,8 +114,14 @@ class MX_RENDERGLSL_API GlslMaterial : public ShaderMaterial
                        ConstValuePtr value,
                        std::string valueString = EMPTY_STRING) override;
 
-  protected:
     void clearShader() override;
+
+    void setProgram(GlslProgramPtr program)
+    {
+        _glProgram = program;
+    }
+
+    void clearProgram();
 
   protected:
     GlslProgramPtr _glProgram;

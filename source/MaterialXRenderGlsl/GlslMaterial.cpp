@@ -23,8 +23,6 @@ const std::string DISTANCE_UNIT_TARGET_NAME = "u_distanceUnitTarget";
 
 bool GlslMaterial::loadSource(const FilePath& vertexShaderFile, const FilePath& pixelShaderFile, bool hasTransparency)
 {
-    _hasTransparency = hasTransparency;
-
     std::string vertexShader = readFile(vertexShaderFile);
     if (vertexShader.empty())
     {
@@ -36,6 +34,13 @@ bool GlslMaterial::loadSource(const FilePath& vertexShaderFile, const FilePath& 
     {
         return false;
     }
+
+    return compileShaders(vertexShader, pixelShader, hasTransparency);
+}
+
+bool GlslMaterial::compileShaders(const std::string& vertexShader, const std::string& pixelShader, bool hasTransparency)
+{
+    _hasTransparency = hasTransparency;
 
     // TODO:
     // Here we set new source code on the _glProgram without rebuilding
@@ -51,6 +56,11 @@ bool GlslMaterial::loadSource(const FilePath& vertexShaderFile, const FilePath& 
 void GlslMaterial::clearShader()
 {
     _hwShader = nullptr;
+    _glProgram = nullptr;
+}
+
+void GlslMaterial::clearProgram()
+{
     _glProgram = nullptr;
 }
 

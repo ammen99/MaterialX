@@ -15,19 +15,11 @@
 #include <MaterialXRenderGlsl/GlslMaterial.h>
 
 #include <csignal>
-#include <fstream>
 
 inline void handle_signal(int signal)
 {
     std::cout << "handle signal!" << std::endl;
     nanogui::leave(); // Properly exit the NanoGUI main loop
-}
-
-inline void write_to_tmp_file(std::string filename, std::string content) {
-    std::ofstream file;
-    file.open(filename, std::ios::trunc | std::ios::ate);
-    file << content;
-    file.close();
 }
 
 inline Json::Value vecUniformToJson(std::string name, int dimensions, float min, float max, std::string hint)
@@ -115,38 +107,37 @@ class ServerController : public drogon::HttpController<ServerController, false>
             return "invalid material state!";
         }
 
-        for (auto& cache: cachedShaders)
-        {
-            if (cache.vertex == vertex && cache.fragment == fragment)
-            {
-                setProgramFromCache(material, &cache);
-                return "";
+        //for (auto& cache: cachedShaders)
+        //{
+        //    if (cache.vertex == vertex && cache.fragment == fragment)
+        //    {
+        //        setProgramFromCache(material, &cache);
+        //        return "";
+        //    }
+        //}
+
+        mx::GlslProgramPtr program = mx::GlslProgram::create();
+        program->addStage(mx::Stage::VERTEX, vertex);
+        program->addStage(mx::Stage::PIXEL, fragment);
+
+        try {
+            program->build();
+        } catch (mx::ExceptionRenderError& e) {
+            std::cout << "Failed to compile shader: " << e.what() << std::endl;
+            std::string full_error;
+            for (auto& line : e.errorLog()) {
+                std::cout << line << std::endl;
+                full_error += line + "\n";
             }
+
+            return full_error;
         }
 
-        write_to_tmp_file("/tmp/vertex.glsl", vertex);
-        write_to_tmp_file("/tmp/fragment.glsl", fragment);
-        if (material->loadSource("/tmp/vertex.glsl", "/tmp/fragment.glsl", material->hasTransparency()))
-        {
-            try {
-                material->bindShader();
-                storeProgramInCache(material, next_tmp_cache, vertex, fragment);
-                return "";
-            } catch (mx::ExceptionRenderError& e) {
-                std::cout << "Failed to bind shader: " << e.what() << std::endl;
-                std::string full_error;
-                for (auto& line : e.errorLog()) {
-                    std::cout << line << std::endl;
-                    full_error += line + "\n";
-                }
+        material->setProgram(program);
+        viewer->assignMaterial(viewer->getSelectedGeometry(), material, false);
 
-                return full_error;
-            }
-        } else
-        {
-            std::cout << "Failed to load shader!" << std::endl;
-            return "generic error!";
-        }
+        //storeProgramInCache(material, next_tmp_cache, vertex, fragment);
+        return "";
     }
 
     void reset(const drogon::HttpRequestPtr& req,
@@ -156,15 +147,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
             std::cout << "Reset shader!" << std::endl;
 
             auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
-            //if (cachedShaders[CACHE_DEFAULT].vertex.empty()) {
-                material->generateShader(viewer->getGenContext());
-                material->bindShader();
-                std::cout << "generating anew " << material->hasTransparency() << std::endl;
-                storeProgramInCache(material, CACHE_DEFAULT);
-            //} else {
-            //    setProgramFromCache(material, &cachedShaders[CACHE_DEFAULT]);
-            //}
-
+            material->generateShader(viewer->getGenContext());
+            material->bindShader();
+            std::cout << "generating anew " << material->hasTransparency() << std::endl;
+            storeProgramInCache(material, CACHE_DEFAULT);
             callback(drogon::HttpResponse::newHttpResponse());
         });
     }
@@ -306,7 +292,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
             {
                 return;
             }
-
 
             for (auto it = req->begin(); it != req->end(); it++) {
                 auto uniformValue = *it;

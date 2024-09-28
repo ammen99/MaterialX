@@ -1766,7 +1766,7 @@ bool Viewer::keyboard_event(int key, int scancode, int action, int modifiers)
     }
 
     // Save GLSL shader source to file.
-    if (key == GLFW_KEY_G && action == GLFW_PRESS)
+    if (key == GLFW_KEY_G && action == (GLFW_PRESS || action == GLFW_REPEAT))
     {
         saveShaderSource(_genContext);
         return true;
@@ -1801,7 +1801,7 @@ bool Viewer::keyboard_event(int key, int scancode, int action, int modifiers)
 
     // Load GLSL shader source from file.  Editing the source files before
     // loading provides a way to debug and experiment with shader source code.
-    if (key == GLFW_KEY_L && action == GLFW_PRESS)
+    if (key == GLFW_KEY_L && (action == GLFW_PRESS || action == GLFW_REPEAT))
     {
         loadShaderSource();
         return true;

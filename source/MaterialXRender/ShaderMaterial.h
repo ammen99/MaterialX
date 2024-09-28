@@ -141,7 +141,6 @@ class MX_RENDER_API ShaderMaterial
                                ConstValuePtr value,
                                std::string valueString = EMPTY_STRING) = 0;
 
-  protected:
     virtual void clearShader() = 0;
 
   protected:
