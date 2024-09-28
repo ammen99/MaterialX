@@ -58,10 +58,8 @@ class ServerController : public drogon::HttpController<ServerController, false>
     struct CachedShader {
         std::string vertex;
         std::string fragment;
-        mx::GlslMaterialPtr cache;
-        CachedShader() {
-            cache = mx::GlslMaterial::create();
-        }
+        mx::GlslProgramPtr cache;
+        CachedShader() { }
     };
 
     std::array<CachedShader, 3> cachedShaders;
@@ -83,7 +81,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         cachedShaders[idx].vertex = vertex;
         cachedShaders[idx].fragment = fragment;
-        cachedShaders[idx].cache->copyShader(material);
+        cachedShaders[idx].cache = material->getProgram();
 
         if (idx != CACHE_DEFAULT) {
             // toggle between indices 1 and 2
@@ -91,11 +89,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
     }
 
-    void setProgramFromCache(mx::GlslMaterialPtr material, CachedShader *shader)
+    void setProgram(mx::GlslMaterialPtr material, mx::GlslProgramPtr program)
     {
-        std::cout << "Reusing cache entry " << (shader == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
-        material->copyShader(shader->cache);
         viewer->assignMaterial(viewer->getSelectedGeometry(), material, false);
+        material->setProgram(program);
     }
 
     std::string setShaderFromSource(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
@@ -107,14 +104,15 @@ class ServerController : public drogon::HttpController<ServerController, false>
             return "invalid material state!";
         }
 
-        //for (auto& cache: cachedShaders)
-        //{
-        //    if (cache.vertex == vertex && cache.fragment == fragment)
-        //    {
-        //        setProgramFromCache(material, &cache);
-        //        return "";
-        //    }
-        //}
+        for (auto& cache: cachedShaders)
+        {
+            if (cache.vertex == vertex && cache.fragment == fragment)
+            {
+                std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
+                setProgram(material, cache.cache);
+                return "";
+            }
+        }
 
         mx::GlslProgramPtr program = mx::GlslProgram::create();
         program->addStage(mx::Stage::VERTEX, vertex);
@@ -133,10 +131,8 @@ class ServerController : public drogon::HttpController<ServerController, false>
             return full_error;
         }
 
-        material->setProgram(program);
-        viewer->assignMaterial(viewer->getSelectedGeometry(), material, false);
-
-        //storeProgramInCache(material, next_tmp_cache, vertex, fragment);
+        setProgram(material, program);
+        storeProgramInCache(material, next_tmp_cache, vertex, fragment);
         return "";
     }
 
