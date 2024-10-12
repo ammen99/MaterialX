@@ -2066,7 +2066,7 @@ nanogui::Vector2i getSize(GLFWwindow *window)
     return nanogui::Vector2i(width, height);
 }
 
-GLuint Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
+GLuint64 Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
 {
     // Resize first
     while (getSize(m_glfw_window) != nanogui::Vector2i(width, height)) {
@@ -2086,7 +2086,6 @@ GLuint Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
 
     this->warmup_counter = 0;
     this->overdraw_counter = 0;
-
     return this->last_timer_result;
 }
 
@@ -2529,12 +2528,16 @@ mx::ImagePtr Viewer::getNextRender(int width, int height)
 {
     this->requestedRenderResolution = {width, height};
 
-    // Wait for GLFW to resize the window to the appropriate size
     while (this->requestedRenderResolution.has_value()) {
         this->set_size({width, height});
-        redraw();
+
+        m_redraw = true;
         draw_all();
-        usleep(1000);
+
+        if (this->requestedRenderResolution.has_value()) {
+            // Wait for GLFW to resize the window to the appropriate size
+            usleep(100);
+        }
     }
 
     return std::move(this->requestedRender);

@@ -237,7 +237,7 @@ class Viewer : public ng::Screen
         _renderPipeline->bakeTextures();
     }
 
-    GLuint runBenchmark(int warmup, int overdraw, int width, int height);
+    GLuint64 runBenchmark(int warmup, int overdraw, int width, int height);
 
     mx::ImagePtr getNextRender(int width, int height);
 

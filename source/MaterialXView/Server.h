@@ -3,8 +3,13 @@
 #include "GLFW/glfw3.h"
 #include <thread>
 #include <drogon/drogon.h>
+#include <drogon/utils/Utilities.h>
 #include <iostream>
 #include <json/json.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define _ << " " <<
 #define debug(x) #x << " = " << x
@@ -271,9 +276,63 @@ class ServerController : public drogon::HttpController<ServerController, false>
         });
     }
 
+    drogon::HttpResponsePtr set_uniforms_from_json(const Json::Value& req)
+    {
+        auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
+        if (!material)
+        {
+            return drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest, drogon::CT_NONE);
+        }
+
+        for (auto it = req.begin(); it != req.end(); it++) {
+            auto uniformValue = *it;
+            if (!uniformValue.isObject() ||
+                !uniformValue.isMember("name") || !uniformValue["name"].isString() ||
+                !uniformValue.isMember("value"))
+            {
+                auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                        drogon::ContentType::CT_TEXT_HTML);
+                resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
+                return resp;
+            }
+
+            auto name = uniformValue["name"].asString();
+            if (name == "camera")
+            {
+                if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 3
+                    || !uniformValue["value"][0].isDouble() || !uniformValue["value"][1].isDouble() || !uniformValue["value"][2].isDouble())
+                {
+                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                            drogon::ContentType::CT_TEXT_HTML);
+                    resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
+                    return resp;
+                }
+
+                viewer->setCameraPosition(mx::Vector3(
+                        uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
+            }
+
+            if (auto uniform = material->findUniform(name))
+            {
+                if (auto err = setValue(material, uniformValue, uniform))
+                {
+                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                            drogon::ContentType::CT_TEXT_HTML);
+                    resp->setBody(err.value());
+                    return resp;
+                }
+            }
+        }
+
+        std::dynamic_pointer_cast<mx::GlslMaterial>(material)->updateTransparency(viewer->getGenContext());
+        std::cout << "setuniforms done" << glfwGetTime() << std::endl;
+        return drogon::HttpResponse::newHttpResponse();
+    }
+
     void setuniforms(const drogon::HttpRequestPtr& _req,
         std::function<void (const drogon::HttpResponsePtr &)> &&callback)
     {
+        std::cout << "setuniforms" << glfwGetTime() << std::endl;
         auto req = _req->getJsonObject();
         if (!req || !req->isArray()) {
             std::cout << "Invalid request: /setuniforms: expected json array" << std::endl;
@@ -283,59 +342,41 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
 
         ng::async([this, callback, req] () mutable {
-            auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
-            if (!material)
-            {
-                return;
-            }
-
-            for (auto it = req->begin(); it != req->end(); it++) {
-                auto uniformValue = *it;
-                if (!uniformValue.isObject() ||
-                    !uniformValue.isMember("name") || !uniformValue["name"].isString() ||
-                    !uniformValue.isMember("value"))
-                {
-                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                            drogon::ContentType::CT_TEXT_HTML);
-                    resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
-                    callback(resp);
-                    return;
-                }
-
-                auto name = uniformValue["name"].asString();
-                if (name == "camera")
-                {
-                    if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 3
-                        || !uniformValue["value"][0].isDouble() || !uniformValue["value"][1].isDouble() || !uniformValue["value"][2].isDouble())
-                    {
-                        auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                drogon::ContentType::CT_TEXT_HTML);
-                        resp->setBody("Invalid request: wrong syntax (expected array of name and value)");
-                        callback(resp);
-                        return;
-                    }
-
-                    viewer->setCameraPosition(mx::Vector3(
-                            uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
-                }
-
-                if (auto uniform = material->findUniform(name))
-                {
-                    if (auto err = setValue(material, uniformValue, uniform))
-                    {
-                        auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                drogon::ContentType::CT_TEXT_HTML);
-                        resp->setBody(err.value());
-                        callback(resp);
-                        return;
-                    }
-                }
-            }
-
-            std::dynamic_pointer_cast<mx::GlslMaterial>(material)->updateTransparency(viewer->getGenContext());
-            std::cout << "Material now has transparency $$$$$$$$$$$$$$$$$$ " << material->hasTransparency() << std::endl;
-            callback(drogon::HttpResponse::newHttpResponse());
+            callback(set_uniforms_from_json(*req));
         });
+    }
+
+    drogon::HttpResponsePtr set_shader_from_json(const Json::Value& req)
+    {
+        std::cout << "Dispatching request for set shader" << std::endl;
+        if (auto material = viewer->getSelectedMaterial())
+        {
+            auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
+            auto old_fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
+
+            auto vertex = req.get("vertex", old_vertex).asString();
+            auto fragment = req.get("fragment", old_fragment).asString();
+
+            auto error = setShaderFromSource(viewer, vertex, fragment);
+            if (error == "")
+            {
+                std::cout << "Successfully set shader! " << glfwGetTime() << std::endl;
+                return drogon::HttpResponse::newHttpResponse();
+            } else
+            {
+                setShaderFromSource(viewer, old_vertex, old_fragment);
+                auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
+                    drogon::ContentType::CT_TEXT_PLAIN);
+                resp->setBody(error);
+                return resp;
+            }
+        } else {
+            std::cout << "Missing selected material ?!?" << std::endl;
+            auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
+                drogon::ContentType::CT_TEXT_PLAIN);
+            resp->setBody("unknown error");
+            return resp;
+        }
     }
 
     void setshader(const drogon::HttpRequestPtr& _req,
@@ -348,40 +389,11 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     drogon::ContentType::CT_TEXT_HTML));
             return;
         }
-        std::cout << "Got request for set shader" << std::endl;
+        std::cout << "Got request for set shader " << glfwGetTime() << std::endl;
 
         ng::async([=] () mutable
         {
-            std::cout << "Dispatching request for set shader" << std::endl;
-
-            if (auto material = viewer->getSelectedMaterial())
-            {
-                auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
-                auto old_fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
-
-                auto vertex = req->get("vertex", old_vertex).asString();
-                auto fragment = req->get("fragment", old_fragment).asString();
-
-                auto error = setShaderFromSource(viewer, vertex, fragment);
-                if (error == "")
-                {
-                    std::cout << "Successfully set shader!" << std::endl;
-                    callback(drogon::HttpResponse::newHttpResponse());
-                } else
-                {
-                    setShaderFromSource(viewer, old_vertex, old_fragment);
-                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
-                        drogon::ContentType::CT_TEXT_PLAIN);
-                    resp->setBody(error);
-                    callback(resp);
-                }
-            } else {
-                std::cout << "Missing selected material ?!?" << std::endl;
-                auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
-                    drogon::ContentType::CT_TEXT_PLAIN);
-                resp->setBody("unknown error");
-                callback(resp);
-            }
+            callback(set_shader_from_json(*req));
         });
     }
 
@@ -401,20 +413,99 @@ class ServerController : public drogon::HttpController<ServerController, false>
         std::cout << "Pending screenshot: " << " width=" << w << " height=" << h << " " << glfwGetTime() << std::endl;
 
         ng::async([=] () mutable {
-            auto img = viewer->getNextRender(w, h);
+            if (req->isMember("variants") &&
+                req->get("variants", Json::nullValue).isArray())
+            {
+                Json::Value response = Json::arrayValue;
+                auto variants = req->get("variants", Json::nullValue);
+                size_t offset = 0;
 
-            auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setContentTypeCode(drogon::CT_CUSTOM);
+                int mapfd = -1;
+                void *mapptr = nullptr;
+                size_t mapfile_size = w * h * 3 * variants.size();
 
-            int width = img->getWidth();
-            int height = img->getHeight();
+                if (req->isMember("mapfile") and req->get("mapfile", Json::nullValue).isString()) {
+                    std::string mapfile = req->get("mapfile", Json::nullValue).asString();
 
-            resp->addCookie("width", std::to_string(width));
-            resp->addCookie("height", std::to_string(height));
-            unsigned char* data = (unsigned char*)img->getResourceBuffer();
-            resp->setBody(std::string(data, data + width * height * 3));
-            callback(resp);
-            std::cout << "Screenshot taken: " << glfwGetTime() << std::endl;
+                    mapfd = shm_open(mapfile.c_str(), O_RDWR, 0);
+                    if (mapfd == -1) {
+                        std::cout << "Failed to open mapfile: " << mapfile << std::endl;
+                        callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                drogon::ContentType::CT_TEXT_HTML));
+                        return;
+                    }
+
+                    mapptr = mmap(nullptr, mapfile_size, PROT_WRITE, MAP_SHARED, mapfd, 0);
+                    if (mapptr == MAP_FAILED) {
+                        std::cout << "Failed to mmap mapfile: " << mapfile << " " << strerror(errno) << std::endl;
+                        close(mapfd);
+                        callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                                drogon::ContentType::CT_TEXT_HTML));
+                        return;
+                    }
+
+                    std::cout << "Using mmap" << std::endl;
+                }
+
+                for (int i = 0; i < (int)variants.size(); ++i)
+                {
+                    std::cout << "i = " << i << std::endl;
+                    if (variants[i].isObject())
+                    {
+                        if (variants[i].isMember("shaders")) {
+                            if (set_shader_from_json(variants[i]["shaders"])->statusCode() != drogon::k200OK) {
+                                continue;
+                            }
+                        }
+
+                        if (variants[i].isMember("uniforms")) {
+                            if (set_uniforms_from_json(variants[i]["uniforms"])->statusCode() != drogon::k200OK) {
+                                continue;
+                            }
+                        }
+
+                        auto imgdata = viewer->getNextRender(w, h);
+
+                        Json::Value img = Json::objectValue;
+                        img["width"] = imgdata->getWidth();
+                        img["height"] = imgdata->getHeight();
+                        img["offset"] = offset;
+
+                        size_t bytesize = imgdata->getWidth() * imgdata->getHeight() * 3;
+                        if (mapptr) {
+                            memcpy((char*)mapptr + offset, imgdata->getResourceBuffer(), bytesize);
+                        } else {
+                            img["data"] = drogon::utils::base64Encode(
+                                (const unsigned char*)imgdata->getResourceBuffer(), bytesize);
+                        }
+
+                        offset += bytesize;
+                        response.append(img);
+                    }
+                }
+
+                if (mapptr) {
+                    msync(mapptr, mapfile_size, MS_SYNC);
+                    munmap(mapptr, mapfile_size);
+                    close(mapfd);
+                }
+
+                callback(drogon::HttpResponse::newHttpJsonResponse(response));
+            } else
+            {
+                // single screenshot, older interface
+                auto img = viewer->getNextRender(w, h);
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setContentTypeCode(drogon::CT_CUSTOM);
+                int width = img->getWidth();
+                int height = img->getHeight();
+
+                resp->addCookie("width", std::to_string(width));
+                resp->addCookie("height", std::to_string(height));
+                unsigned char* data = (unsigned char*)img->getResourceBuffer();
+                resp->setBody(std::string(data, data + width * height * 3));
+                callback(resp);
+            }
         });
     }
 
@@ -442,7 +533,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         ng::async([=] () mutable {
             std::cout << "Running benchmark " << width << " " << height << " " << nr_frames << std::endl;
-            GLuint speed = viewer->runBenchmark(warmup, nr_frames, width, height);
+            GLuint64 speed = viewer->runBenchmark(warmup, nr_frames, width, height);
             std::cout << "Results: " << speed << std::endl;
             Json::Value r;
             r["speed"] = speed;
@@ -490,6 +581,7 @@ class Server {
 
         main_running = true;
         drogon::app()
+            .setClientMaxBodySize(std::numeric_limits<size_t>::max())
             .setLogPath("./")
             .setLogLevel(trantor::Logger::kWarn)
             .addListener("0.0.0.0", port)
