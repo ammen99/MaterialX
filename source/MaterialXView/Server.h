@@ -325,7 +325,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
 
         std::dynamic_pointer_cast<mx::GlslMaterial>(material)->updateTransparency(viewer->getGenContext());
-        std::cout << "setuniforms done" << glfwGetTime() << std::endl;
         return drogon::HttpResponse::newHttpResponse();
     }
 
@@ -343,6 +342,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         ng::async([this, callback, req] () mutable {
             callback(set_uniforms_from_json(*req));
+            std::cout << "setuniforms done" << glfwGetTime() << std::endl;
         });
     }
 
@@ -449,7 +449,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
                 for (int i = 0; i < (int)variants.size(); ++i)
                 {
-                    std::cout << "i = " << i << std::endl;
                     if (variants[i].isObject())
                     {
                         if (variants[i].isMember("shaders")) {
