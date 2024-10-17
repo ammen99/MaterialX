@@ -173,6 +173,15 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
     void append_uniform(Json::Value& list, const mx::UIPropertyItem& item)
     {
+        if (auto material = viewer->getSelectedMaterial())
+        {
+            if (!material->findUniform(item.variable->getPath()))
+            {
+                // Potentially optimized out, see Util.cpp
+                return;
+            }
+        }
+
         auto value = item.variable->getValue();
 
         if (value->getTypeString() == "float")
@@ -193,7 +202,13 @@ class ServerController : public drogon::HttpController<ServerController, false>
         else if (value->getTypeString() == "boolean")
         {
             list.append(boolUniformToJson(item.variable->getPath()));
-        } else
+        } else if (value->getTypeString() == "string")
+        {
+            // usually resource paths, we can't really change those...
+            // unless we want to generate random textures which doesn't seem very meaningful
+            return;
+        }
+        else
         {
             std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Unknown type: " << value->getTypeString() << std::endl;
         }
