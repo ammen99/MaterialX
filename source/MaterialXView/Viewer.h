@@ -170,6 +170,11 @@ class Viewer : public ng::Screen
         initTiming();
     }
 
+    void setTransparencyEnabled(bool enable)
+    {
+        this->_renderTransparency = enable;
+    }
+
     // Reset frame timing after a blocking event.
     void resetFrameTiming()
     {

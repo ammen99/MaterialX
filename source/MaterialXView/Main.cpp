@@ -48,6 +48,7 @@ const std::string options =
     "    --remap [TOKEN1:TOKEN2]        Specify the remapping from one token to another when MaterialX document is loaded\n"
     "    --skip [NAME]                  Specify to skip elements matching the given name attribute\n"
     "    --terminator [STRING]          Specify to enforce the given terminator string for file prefixes\n"
+    "    --transparency [BOOLEAN]       Specify whether transparency should be enabled by default\n"
     "    --help                         Display the complete list of command-line options\n";
 
 template <class T> void parseToken(std::string token, std::string type, T& res)
@@ -106,6 +107,7 @@ int main(int argc, char* const argv[])
     float refresh = 50.0f;
     bool frameTiming = false;
     int serverPort = 51515;
+    bool enableTransparencyByDefault = false;
 
     for (size_t i = 0; i < tokens.size(); i++)
     {
@@ -255,6 +257,10 @@ int main(int argc, char* const argv[])
         {
             modifiers.filePrefixTerminator = nextToken;
         }
+        else if (token == "--transparency")
+        {
+            parseToken(nextToken, "boolean", enableTransparencyByDefault);
+        }
         else if (token == "--help")
         {
             std::cout << " MaterialXView version " << mx::getVersionString() << std::endl;
@@ -311,6 +317,7 @@ int main(int argc, char* const argv[])
         viewer->setBakeHeight(bakeHeight);
         viewer->setBakeFilename(bakeFilename);
         viewer->setFrameTiming(frameTiming);
+        viewer->setTransparencyEnabled(enableTransparencyByDefault);
         viewer->initialize();
 
         if (!captureFilename.empty())
