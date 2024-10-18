@@ -249,6 +249,7 @@ class Viewer : public ng::Screen
     // Assign the given material to the given geometry, or remove any
     // existing assignment if the given material is nullptr.
     void assignMaterial(mx::MeshPartitionPtr geometry, mx::MaterialPtr material, bool updateProperties = true);
+    void updateDisplayedProperties();
 
   private:
     int warmup_counter = 0;
@@ -308,7 +309,6 @@ class Viewer : public ng::Screen
     void updateGeometrySelections();
     void updateMaterialSelections();
     void updateMaterialSelectionUI();
-    void updateDisplayedProperties();
 
     void createLoadMeshInterface(Widget* parent, const std::string& label);
     void createLoadMaterialsInterface(Widget* parent, const std::string& label);
