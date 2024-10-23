@@ -44,6 +44,8 @@ class PropertyEditor
         return _window;
     }
 
+    void updateUniform(const std::string& name, const mx::ValuePtr& value);
+
   protected:
     void create(Viewer& parent);
     void addItemToForm(const mx::UIPropertyItem& item, const std::string& group,
@@ -55,6 +57,8 @@ class PropertyEditor
     ng::GridLayout* _gridLayout3;
     bool _visible;
     bool _fileDialogsForImages;
+
+    std::map<std::string, std::function<void(mx::ValuePtr)>> valueUpdaters;
 };
 
 ng::FloatBox<float>* createFloatWidget(ng::Widget* parent, const std::string& label, float value,

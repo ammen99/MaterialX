@@ -362,6 +362,11 @@ class Viewer : public ng::Screen
     // Material assignments
     std::map<mx::MeshPartitionPtr, mx::MaterialPtr> _materialAssignments;
 
+    void updateUniform(const std::string& name, const mx::ValuePtr& value)
+    {
+        this->_propertyEditor.updateUniform(name, value);
+    }
+
   private:
     ng::Window* _window = nullptr;
     RenderPipelinePtr _renderPipeline;

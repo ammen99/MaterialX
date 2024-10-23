@@ -115,7 +115,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         {
             if (cache.vertex == vertex && cache.fragment == fragment)
             {
-                std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
+                //std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
                 setProgram(material, cache.cache);
                 return "";
             }
@@ -159,7 +159,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
             }
 
             if (resetShader) {
-                std::cout << "Reset shader!" << std::endl;
+                //std::cout << "Reset shader!" << std::endl;
                 auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
                 material->generateShader(viewer->getGenContext());
                 material->bindShader();
@@ -167,7 +167,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
             }
 
             if (resetUniforms) {
-                std::cout << "Resetting uniforms" << std::endl;
+                //std::cout << "Resetting uniforms" << std::endl;
                 auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
                 for (auto& uniform: this->defaultValues) {
                     if (material->findUniform(uniform.first)) {
@@ -219,6 +219,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         };
 
         auto value = item.variable->getValue();
+        auto defaultValue = this->defaultValues.count(path) ? this->defaultValues[path] : value;
 
         if (value->getTypeString() == "float")
         {
@@ -232,14 +233,14 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
             auto j = vecUniformToJson(item.variable->getPath(), 1, min, max, "float");
             j["value"] = Json::arrayValue;
-            j["value"].append(value->asA<float>());
+            j["value"].append(defaultValue->asA<float>());
             list.append(j);
             store_default();
         }
         else if (value->getTypeString() == "color3")
         {
             auto j = vecUniformToJson(item.variable->getPath(), 3, 0, 1, "color3");
-            auto v = item.variable->getValue()->asA<mx::Color3>();
+            auto v = defaultValue->asA<mx::Color3>();
             j["value"] = Json::arrayValue;
             j["value"].append(v[0]);
             j["value"].append(v[1]);
@@ -250,7 +251,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         else if (value->getTypeString() == "boolean")
         {
             auto j = boolUniformToJson(item.variable->getPath());
-            j["value"] = item.variable->getValue()->asA<bool>();
+            j["value"] = defaultValue->asA<bool>();
             list.append(j);
             store_default();
         } else if (value->getTypeString() == "string")
@@ -276,6 +277,8 @@ class ServerController : public drogon::HttpController<ServerController, false>
             this->defaultValues[path] = uniform->getValue();
         }
 
+        mx::ValuePtr newValue;
+
         if (uniform->getValue()->getTypeString() == "float")
         {
             if (!value.isArray() || value.size() != 1 || !value[0].isDouble())
@@ -283,7 +286,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 return "Invalid float value for " + path;
             }
 
-            material->modifyUniform(path, mx::Value::createValue(float(value[0].asDouble())));
+            newValue = mx::Value::createValue(float(value[0].asDouble()));
         }
         else if (uniform->getValue()->getTypeString() == "color3")
         {
@@ -292,8 +295,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 return "Invalid color value for " + path;
             }
 
-            material->modifyUniform(path, mx::Value::createValue(
-                    mx::Color3(value[0].asDouble(), value[1].asDouble(), value[2].asDouble())));
+            newValue = mx::Value::createValue(mx::Color3(value[0].asDouble(), value[1].asDouble(), value[2].asDouble()));
         }
         else if (uniform->getValue()->getTypeString() == "boolean")
         {
@@ -302,10 +304,17 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 return "Invalid boolean value for " + path;
             }
 
-            material->modifyUniform(path, mx::Value::createValue(value.asBool()));
-        } else
+            newValue = mx::Value::createValue(value.asBool());
+        }
+        else
         {
             std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Unknown type for set: " << uniform->getValue()->getTypeString() << std::endl;
+        }
+
+        if (newValue)
+        {
+            material->modifyUniform(path, newValue);
+            viewer->updateUniform(path, newValue);
         }
 
         return {};
@@ -417,7 +426,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         ng::async([this, callback, req] () mutable {
             auto resp = set_uniforms_from_json(*req);
-            viewer->updateDisplayedProperties();
             callback(resp);
             std::cout << "setuniforms done" << glfwGetTime() << std::endl;
         });
@@ -425,7 +433,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
     drogon::HttpResponsePtr set_shader_from_json(const Json::Value& req)
     {
-        std::cout << "Dispatching request for set shader" << std::endl;
         if (auto material = viewer->getSelectedMaterial())
         {
             auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
@@ -470,6 +477,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         ng::async([=] () mutable
         {
+            std::cout << "Dispatching request for set shader" << std::endl;
             callback(set_shader_from_json(*req));
         });
     }
@@ -522,6 +530,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     }
                 }
 
+                float time_render = 0;
+                float time_copy = 0;
+
+
                 for (int i = 0; i < (int)variants.size(); ++i)
                 {
                     if (variants[i].isObject())
@@ -538,7 +550,9 @@ class ServerController : public drogon::HttpController<ServerController, false>
                             }
                         }
 
+                        auto x = glfwGetTime();
                         auto imgdata = viewer->getNextRender(w, h);
+                        auto y = glfwGetTime();
 
                         Json::Value img = Json::objectValue;
                         img["width"] = imgdata->getWidth();
@@ -555,6 +569,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
                         offset += bytesize;
                         response.append(img);
+                        auto z = glfwGetTime();
+
+                        time_render += y - x;
+                        time_copy += z - y;
                     }
                 }
 
@@ -564,8 +582,13 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     close(mapfd);
                 }
 
-                viewer->updateDisplayedProperties();
+                float x = glfwGetTime();
                 callback(drogon::HttpResponse::newHttpJsonResponse(response));
+                float z = glfwGetTime();
+
+                float time_cb = z - x;
+
+                std::cout << "Time stats:" _ debug(time_render) _ debug(time_copy) _ debug(time_cb) << std::endl;
             } else
             {
                 // single screenshot, older interface

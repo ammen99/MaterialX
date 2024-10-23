@@ -211,6 +211,14 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                     }
                 }
             });
+
+            this->valueUpdaters[path] = [comboBox](const mx::ValuePtr& value)
+            {
+                if (value->isA<int>())
+                {
+                    comboBox->set_selected_index(value->asA<int>());
+                }
+            };
         }
         else
         {
@@ -245,6 +253,14 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                 intVar->set_value_increment(ui.uiStep->asA<int>());
             }
             intVar->set_value(value->asA<int>());
+
+            this->valueUpdaters[path] = [intVar](const mx::ValuePtr& value)
+            {
+                if (value->isA<int>())
+                {
+                    intVar->set_value(value->asA<int>());
+                }
+            };
         }
     }
 
@@ -263,6 +279,14 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
         });
         floatBox->set_fixed_size(ng::Vector2i(100, 20));
         floatBox->set_editable(editable);
+
+        this->valueUpdaters[path] = [floatBox](const mx::ValuePtr& value)
+        {
+            if (value->isA<float>())
+            {
+                floatBox->set_value(value->asA<float>());
+            }
+        };
     }
 
     // Boolean widget
@@ -284,6 +308,14 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                 material->modifyUniform(path, mx::Value::createValue((float) v));
             }
         });
+
+        this->valueUpdaters[path] = [boolVar](const mx::ValuePtr& value)
+        {
+            if (value->isA<bool>())
+            {
+                boolVar->set_checked(value->asA<bool>());
+            }
+        };
     }
 
     // Color3 input. Can map to a combo box if an enumeration
@@ -346,6 +378,15 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                     material->modifyUniform(path, mx::Value::createValue(v));
                 }
             });
+
+            this->valueUpdaters[path] = [colorVar](const mx::ValuePtr& value)
+            {
+                if (value->isA<mx::Color3>())
+                {
+                    auto color = value->asA<mx::Color3>();
+                    colorVar->set_color(ng::Color(color[0], color[1], color[2], 1.0));
+                }
+            };
         }
     }
 
@@ -370,6 +411,15 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                 material->modifyUniform(path, mx::Value::createValue(v));
             }
         });
+
+        this->valueUpdaters[path] = [colorVar](const mx::ValuePtr& value)
+        {
+            if (value->isA<mx::Color4>())
+            {
+                auto color = value->asA<mx::Color4>();
+                colorVar->set_color(ng::Color(color[0], color[1], color[2], color[3]));
+            }
+        };
     }
 
     // Vec 2 widget
@@ -409,6 +459,16 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
         });
         v2->set_spinnable(editable);
         v2->set_editable(editable);
+
+        this->valueUpdaters[path] = [v1, v2](const mx::ValuePtr& value)
+        {
+            if (value->isA<mx::Vector2>())
+            {
+                auto vec = value->asA<mx::Vector2>();
+                v1->set_value(vec[0]);
+                v2->set_value(vec[1]);
+            }
+        };
     }
 
     // Vec 3 input
@@ -464,6 +524,17 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
         });
         v3->set_spinnable(editable);
         v3->set_editable(editable);
+
+        this->valueUpdaters[path] = [v1, v2, v3](const mx::ValuePtr& value)
+        {
+            if (value->isA<mx::Vector3>())
+            {
+                auto vec = value->asA<mx::Vector3>();
+                v1->set_value(vec[0]);
+                v2->set_value(vec[1]);
+                v3->set_value(vec[2]);
+            }
+        };
     }
 
     // Vec 4 input
@@ -533,6 +604,18 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
         });
         v4->set_spinnable(editable);
         v4->set_editable(editable);
+
+        this->valueUpdaters[path] = [v1, v2, v3, v4](const mx::ValuePtr& value)
+        {
+            if (value->isA<mx::Vector4>())
+            {
+                auto vec = value->asA<mx::Vector4>();
+                v1->set_value(vec[0]);
+                v2->set_value(vec[1]);
+                v3->set_value(vec[2]);
+                v4->set_value(vec[3]);
+            }
+        };
     }
 
     // String
@@ -595,6 +678,14 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
                     }
                     return true;
                 });
+
+                this->valueUpdaters[path] = [stringVar](const mx::ValuePtr& value)
+                {
+                    if (value->isA<std::string>())
+                    {
+                        stringVar->set_value(value->asA<std::string>());
+                    }
+                };
             }
         }
     }
@@ -602,6 +693,7 @@ void PropertyEditor::addItemToForm(const mx::UIPropertyItem& item, const std::st
 
 void PropertyEditor::updateContents(Viewer* viewer)
 {
+    this->valueUpdaters.clear();
     create(*viewer);
 
     mx::MaterialPtr material = viewer->getSelectedMaterial();
@@ -803,4 +895,12 @@ ng::IntBox<int>* createIntWidget(ng::Widget* parent, const std::string& label, i
     });
 
     return box;
+}
+
+void PropertyEditor::updateUniform(const std::string& name, const mx::ValuePtr& value)
+{
+    if (this->valueUpdaters.count(name))
+    {
+        this->valueUpdaters[name](value);
+    }
 }
