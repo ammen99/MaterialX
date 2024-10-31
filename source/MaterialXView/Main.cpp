@@ -49,6 +49,7 @@ const std::string options =
     "    --skip [NAME]                  Specify to skip elements matching the given name attribute\n"
     "    --terminator [STRING]          Specify to enforce the given terminator string for file prefixes\n"
     "    --transparency [BOOLEAN]       Specify whether transparency should be enabled by default\n"
+    "    --disable-mu                   Disable reporting uniforms coming from materials\n"
     "    --help                         Display the complete list of command-line options\n";
 
 template <class T> void parseToken(std::string token, std::string type, T& res)
@@ -108,6 +109,7 @@ int main(int argc, char* const argv[])
     bool frameTiming = false;
     int serverPort = 51515;
     bool enableTransparencyByDefault = false;
+    bool disableMaterialUniforms = false;
 
     for (size_t i = 0; i < tokens.size(); i++)
     {
@@ -261,6 +263,10 @@ int main(int argc, char* const argv[])
         {
             parseToken(nextToken, "boolean", enableTransparencyByDefault);
         }
+        else if (token == "--disable-mu")
+        {
+            disableMaterialUniforms = true;
+        }
         else if (token == "--help")
         {
             std::cout << " MaterialXView version " << mx::getVersionString() << std::endl;
@@ -338,7 +344,7 @@ int main(int argc, char* const argv[])
 
         {
             Server webServer;
-            webServer.start_server(viewer, serverPort);
+            webServer.start_server(viewer, serverPort, disableMaterialUniforms);
             ng::mainloop(refresh);
         }
     }

@@ -203,12 +203,27 @@ class Viewer : public ng::Screen
         return _imageHandler;
     }
 
+    size_t getSelectedMaterialIndex() const
+    {
+        return _selectedMaterial;
+    }
+
     // Return the selected material.
     mx::MaterialPtr getSelectedMaterial() const
     {
         if (_selectedMaterial < _materials.size())
         {
             return _materials[_selectedMaterial];
+        }
+        return nullptr;
+    }
+
+    // Return the selected material.
+    mx::MaterialPtr getMaterial(size_t idx) const
+    {
+        if (idx < _materials.size())
+        {
+            return _materials[idx];
         }
         return nullptr;
     }
@@ -367,6 +382,8 @@ class Viewer : public ng::Screen
         this->_propertyEditor.updateUniform(name, value);
     }
 
+    std::vector<mx::MaterialPtr> _materials;
+
   private:
     ng::Window* _window = nullptr;
     RenderPipelinePtr _renderPipeline;
@@ -434,7 +451,6 @@ class Viewer : public ng::Screen
     ng::ComboBox* _geometrySelectionBox;
 
     // Material selections
-    std::vector<mx::MaterialPtr> _materials;
     mx::MaterialPtr _wireMaterial;
     size_t _selectedMaterial;
     ng::Label* _materialLabel;

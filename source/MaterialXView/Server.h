@@ -67,58 +67,81 @@ class ServerController : public drogon::HttpController<ServerController, false>
         CachedShader() { }
     };
 
-    std::array<CachedShader, 3> cachedShaders;
-    static constexpr size_t CACHE_DEFAULT = 0;
-    size_t next_tmp_cache = 1;
+    struct ProgramCache {
+        static constexpr size_t CACHE_DEFAULT = 0;
+        std::array<CachedShader, 3> cachedShaders;
+        size_t next_tmp_cache = 1;
 
-    std::map<std::string, mx::ValuePtr> defaultValues;
+        void storeProgramInCache(mx::GlslMaterialPtr material, bool isDefault,
+            std::string vertex = "", std::string fragment = "")
+        {
+            size_t idx = isDefault ? CACHE_DEFAULT : next_tmp_cache;
+            if (!isDefault) {
+                // toggle between indices 1 and 2
+                next_tmp_cache = 3 - next_tmp_cache;
+            }
 
-    void storeProgramInCache(mx::GlslMaterialPtr material, size_t idx,
-        std::string vertex = "", std::string fragment = "")
-    {
-        if (vertex == "") {
-            vertex = material->getProgram()->getShader()->getSourceCode(mx::Stage::VERTEX);
+            if (vertex == "") {
+                vertex = material->getProgram()->getShader()->getSourceCode(mx::Stage::VERTEX);
+            }
+
+            if (fragment == "") {
+                fragment = material->getProgram()->getShader()->getSourceCode(mx::Stage::PIXEL);
+            }
+
+            std::cout << "Storing " <<
+                (idx == CACHE_DEFAULT ? "default" : "tmp") << " " << vertex.length() << " " << fragment.length() << std::endl;
+
+            cachedShaders[idx].vertex = vertex;
+            cachedShaders[idx].fragment = fragment;
+            cachedShaders[idx].cache = material->getProgram();
         }
 
-        if (fragment == "") {
-            fragment = material->getProgram()->getShader()->getSourceCode(mx::Stage::PIXEL);
+        mx::GlslProgramPtr findProgram(std::string vertex, std::string fragment)
+        {
+            for (auto& cache: cachedShaders)
+            {
+                if (cache.vertex == vertex && cache.fragment == fragment)
+                {
+                    return cache.cache;
+                }
+            }
+
+            return nullptr;
         }
+    };
 
-        std::cout << "Storing " << (idx == CACHE_DEFAULT ? "default" : "tmp") << " " << vertex.length() << " " << fragment.length() << std::endl;
-
-        cachedShaders[idx].vertex = vertex;
-        cachedShaders[idx].fragment = fragment;
-        cachedShaders[idx].cache = material->getProgram();
-
-        if (idx != CACHE_DEFAULT) {
-            // toggle between indices 1 and 2
-            next_tmp_cache = 3 - next_tmp_cache;
-        }
-    }
+    std::map<mx::MaterialPtr, ProgramCache> programCache;
+    std::map<mx::MaterialPtr, std::map<std::string, mx::ValuePtr>> defaultValues;
 
     void setProgram(mx::GlslMaterialPtr material, mx::GlslProgramPtr program)
     {
-        viewer->assignMaterial(viewer->getSelectedGeometry(), material, false);
+        std::vector<mx::MeshPartitionPtr> assignedMeshes;
+        for (auto& [mesh, materialAssignment] : viewer->_materialAssignments) {
+            if (materialAssignment == material) {
+                assignedMeshes.push_back(mesh);
+            }
+        }
+
+        for (auto& mesh: assignedMeshes) {
+            viewer->assignMaterial(mesh, material, false);
+        }
+
         material->setProgram(program);
     }
 
-    std::string setShaderFromSource(ng::ref<Viewer> viewer, std::string vertex, std::string fragment)
+    std::string setShaderFromSource(mx::MaterialPtr _material, std::string vertex, std::string fragment)
     {
-        auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
+        auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(_material);
         if (!material)
         {
             std::cout << "No material selected!" << std::endl;
             return "invalid material state!";
         }
 
-        for (auto& cache: cachedShaders)
+        if (auto cached = this->programCache[material].findProgram(vertex, fragment))
         {
-            if (cache.vertex == vertex && cache.fragment == fragment)
-            {
-                //std::cout << "Reusing cache entry " << (&cache == &cachedShaders[CACHE_DEFAULT] ? "default" : "tmp") << std::endl;
-                setProgram(material, cache.cache);
-                return "";
-            }
+            setProgram(material, cached);
         }
 
         mx::GlslProgramPtr program = mx::GlslProgram::create();
@@ -139,7 +162,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         }
 
         setProgram(material, program);
-        storeProgramInCache(material, next_tmp_cache, vertex, fragment);
+        programCache[material].storeProgramInCache(material, false, vertex, fragment);
         return "";
     }
 
@@ -158,24 +181,25 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 resetShader = value->get("resetShader", true).asBool();
             }
 
-            if (resetShader) {
-                //std::cout << "Reset shader!" << std::endl;
-                auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
-                material->generateShader(viewer->getGenContext());
-                material->bindShader();
-                storeProgramInCache(material, CACHE_DEFAULT);
+            for (auto& mat : viewer->_materials) {
+                auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(mat);
+                if (resetShader) {
+                    //std::cout << "Reset shader!" << std::endl;
+                    material->generateShader(viewer->getGenContext());
+                    material->bindShader();
+                    programCache[material].storeProgramInCache(material, true);
+                }
+
+                if (resetUniforms) {
+                    for (auto& uniform: this->defaultValues[mat]) {
+                        if (material->findUniform(uniform.first)) {
+                            material->modifyUniform(uniform.first, uniform.second);
+                        }
+                    }
+                }
             }
 
             if (resetUniforms) {
-                //std::cout << "Resetting uniforms" << std::endl;
-                auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(viewer->getSelectedMaterial());
-                for (auto& uniform: this->defaultValues) {
-                    if (material->findUniform(uniform.first)) {
-                        std::cout << "resetting " << uniform.first << std::endl;
-                        material->modifyUniform(uniform.first, uniform.second);
-                    }
-                }
-
                 viewer->setCameraPosition(DEFAULT_CAMERA_POSITION);
             }
 
@@ -194,6 +218,18 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 r["fragment"] = material->getShader()->getSourceCode(mx::Stage::PIXEL);
             }
 
+            r["allmaterials"] = Json::Value(Json::arrayValue);
+            for (auto& material : viewer->_materials)
+            {
+                if (auto shader = material->getShader())
+                {
+                    Json::Value v;
+                    v["vertex"] = shader->getSourceCode(mx::Stage::VERTEX);
+                    v["fragment"] = shader->getSourceCode(mx::Stage::PIXEL);
+                    r["allmaterials"].append(v);
+                }
+            }
+
             callback(drogon::HttpResponse::newHttpJsonResponse(r));
         });
     }
@@ -201,25 +237,23 @@ class ServerController : public drogon::HttpController<ServerController, false>
     void append_uniform(Json::Value& list, const mx::UIPropertyItem& item)
     {
         auto path = item.variable->getPath();
-        if (auto material = viewer->getSelectedMaterial())
+        auto material = viewer->getSelectedMaterial();
+        if (!material->findUniform(path))
         {
-            if (!material->findUniform(path))
-            {
-                // Potentially optimized out, see Util.cpp
-                return;
-            }
+            // Potentially optimized out, see Util.cpp
+            return;
         }
 
         const auto& store_default = [&] () {
-            if (!this->defaultValues.count(path))
+            if (!this->defaultValues[material].count(path))
             {
                 // store in cache for later resets
-                this->defaultValues[path] = item.variable->getValue();
+                this->defaultValues[material][path] = item.variable->getValue();
             }
         };
 
         auto value = item.variable->getValue();
-        auto defaultValue = this->defaultValues.count(path) ? this->defaultValues[path] : value;
+        auto defaultValue = this->defaultValues[material].count(path) ? this->defaultValues[material][path] : value;
 
         if (value->getTypeString() == "float")
         {
@@ -271,10 +305,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
         auto path = uniformValue["name"].asString();
         auto value = uniformValue["value"];
 
-        if (!this->defaultValues.count(path))
+        if (!this->defaultValues[material].count(path))
         {
             // store in cache for later resets
-            this->defaultValues[path] = uniform->getValue();
+            this->defaultValues[material][path] = uniform->getValue();
         }
 
         mx::ValuePtr newValue;
@@ -335,7 +369,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
             if (auto material = viewer->getSelectedMaterial())
             {
-                if (material->getPublicUniforms())
+                if (material->getPublicUniforms() && !this->disableMaterialUniforms)
                 {
                     auto& uniforms = *material->getPublicUniforms();
 
@@ -433,7 +467,18 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
     drogon::HttpResponsePtr set_shader_from_json(const Json::Value& req)
     {
-        if (auto material = viewer->getSelectedMaterial())
+        if (req.isArray()) {
+            for (auto material : req) {
+                auto resp = set_shader_from_json(material);
+                if (resp->statusCode() != drogon::k200OK) {
+                    return resp;
+                }
+            }
+            return drogon::HttpResponse::newHttpResponse();
+        }
+
+        int material_idx = req.get("material-idx", viewer->getSelectedMaterialIndex()).asInt();
+        if (auto material = viewer->getMaterial(material_idx))
         {
             auto old_vertex = material->getShader()->getSourceCode(mx::Stage::VERTEX);
             auto old_fragment = material->getShader()->getSourceCode(mx::Stage::PIXEL);
@@ -441,14 +486,15 @@ class ServerController : public drogon::HttpController<ServerController, false>
             auto vertex = req.get("vertex", old_vertex).asString();
             auto fragment = req.get("fragment", old_fragment).asString();
 
-            auto error = setShaderFromSource(viewer, vertex, fragment);
+            auto error = setShaderFromSource(material, vertex, fragment);
             if (error == "")
             {
-                std::cout << "Successfully set shader! " << glfwGetTime() << std::endl;
+                std::cout << "Successfully set shader for material=" << material_idx
+                    << " ctime=" << glfwGetTime() << std::endl;
                 return drogon::HttpResponse::newHttpResponse();
             } else
             {
-                setShaderFromSource(viewer, old_vertex, old_fragment);
+                setShaderFromSource(material, old_vertex, old_fragment);
                 auto resp = drogon::HttpResponse::newHttpResponse(drogon::k418ImATeapot,
                     drogon::ContentType::CT_TEXT_PLAIN);
                 resp->setBody(error);
@@ -640,17 +686,19 @@ class ServerController : public drogon::HttpController<ServerController, false>
     }
 
     ng::ref<Viewer> viewer;
-    ServerController(ng::ref<Viewer> viewer) : viewer(viewer) {}
+    bool disableMaterialUniforms = false;
+    ServerController(ng::ref<Viewer> viewer, bool disableMaterialUniforms) :
+        viewer(viewer), disableMaterialUniforms(disableMaterialUniforms) {}
 };
-
-
 
 /**
  * A simple class which encapsulates the state used for setting the shader and current material remotely.
  */
 class Server {
+    bool disableMaterialUniforms;
   public:
-    void start_server(ng::ref<Viewer> viewer, int port) {
+    void start_server(ng::ref<Viewer> viewer, int port, bool disableMaterialUniforms) {
+        this->disableMaterialUniforms = disableMaterialUniforms;
         viewer->setFrameTiming(true);
         std::cout << "Starting HTTP Server... at port=" << port << std::endl;
         server_thread = std::thread([=] () {
@@ -684,7 +732,7 @@ class Server {
             .setLogLevel(trantor::Logger::kWarn)
             .addListener("0.0.0.0", port)
             .setThreadNum(1)
-            .registerController(std::make_shared<ServerController>(viewer))
+            .registerController(std::make_shared<ServerController>(viewer, disableMaterialUniforms))
             .run();
     }
 
