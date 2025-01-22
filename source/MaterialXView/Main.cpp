@@ -265,7 +265,7 @@ int main(int argc, char* const argv[])
         }
         else if (token == "--disable-mu")
         {
-            disableMaterialUniforms = true;
+            parseToken(nextToken, "boolean", disableMaterialUniforms);
         }
         else if (token == "--help")
         {

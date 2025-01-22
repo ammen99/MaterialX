@@ -109,6 +109,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
             return nullptr;
         }
+
+        mx::GlslProgramPtr& getDefault() {
+            return cachedShaders[CACHE_DEFAULT].cache;
+        }
     };
 
     std::map<mx::MaterialPtr, ProgramCache> programCache;
@@ -184,10 +188,14 @@ class ServerController : public drogon::HttpController<ServerController, false>
             for (auto& mat : viewer->_materials) {
                 auto material = std::dynamic_pointer_cast<mx::GlslMaterial>(mat);
                 if (resetShader) {
-                    //std::cout << "Reset shader!" << std::endl;
-                    material->generateShader(viewer->getGenContext());
-                    material->bindShader();
-                    programCache[material].storeProgramInCache(material, true);
+                    if (auto cached = this->programCache[material].getDefault()) {
+                        setProgram(material, cached);
+                    } else {
+                        material->unbindGeometry();
+                        material->generateShader(viewer->getGenContext());
+                        material->bindShader();
+                        programCache[material].storeProgramInCache(material, true);
+                    }
                 }
 
                 if (resetUniforms) {
@@ -541,7 +549,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
         int w = req->get("width", viewer->width()).asInt();
         int h = req->get("height", viewer->height()).asInt();
-        std::cout << "Pending screenshot: " << " width=" << w << " height=" << h << " " << glfwGetTime() << std::endl;
+        //std::cout << "Pending screenshot: " << " width=" << w << " height=" << h << " " << glfwGetTime() << std::endl;
 
         ng::async([=] () mutable {
             if (req->isMember("variants") &&
@@ -576,9 +584,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     }
                 }
 
-                float time_render = 0;
-                float time_copy = 0;
-
 
                 for (int i = 0; i < (int)variants.size(); ++i)
                 {
@@ -596,10 +601,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
                             }
                         }
 
-                        auto x = glfwGetTime();
                         auto imgdata = viewer->getNextRender(w, h);
-                        auto y = glfwGetTime();
-
                         Json::Value img = Json::objectValue;
                         img["width"] = imgdata->getWidth();
                         img["height"] = imgdata->getHeight();
@@ -615,10 +617,6 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
                         offset += bytesize;
                         response.append(img);
-                        auto z = glfwGetTime();
-
-                        time_render += y - x;
-                        time_copy += z - y;
                     }
                 }
 
@@ -628,13 +626,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     close(mapfd);
                 }
 
-                float x = glfwGetTime();
                 callback(drogon::HttpResponse::newHttpJsonResponse(response));
-                float z = glfwGetTime();
-
-                float time_cb = z - x;
-
-                std::cout << "Time stats:" _ debug(time_render) _ debug(time_copy) _ debug(time_cb) << std::endl;
             } else
             {
                 // single screenshot, older interface
