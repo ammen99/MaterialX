@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fstream>
 
 #define _ << " " <<
 #define debug(x) #x << " = " << x
@@ -139,14 +140,41 @@ class ServerController : public drogon::HttpController<ServerController, false>
             return "invalid material state!";
         }
 
+        if (vertex.empty() || fragment.empty()) {
+            std::cout << "Empty shader source!" << std::endl;
+            return "empty shader source!";
+        }
+
         if (auto cached = this->programCache[material].findProgram(vertex, fragment))
         {
             setProgram(material, cached);
         }
 
+        const auto& load_binary_file = [] (const std::string& filename) {
+            std::ifstream file(filename, std::ios::binary | std::ios::ate);
+            auto size = file.tellg();
+            file.seekg(0, std::ios::beg);
+            std::vector<unsigned char> buffer(size);
+            file.read((char*)buffer.data(), size);
+            return buffer;
+        };
+
         mx::GlslProgramPtr program = mx::GlslProgram::create();
-        program->addStage(mx::Stage::VERTEX, vertex);
-        program->addStage(mx::Stage::PIXEL, fragment);
+        if (vertex.find("binary:") == 0) {
+            auto path = vertex.substr(7);
+            auto data = load_binary_file(path);
+            program->addStageBinary(mx::Stage::VERTEX, data);
+        } else {
+            program->addStage(mx::Stage::VERTEX, vertex);
+        }
+
+        if (fragment.find("binary:") == 0) {
+            auto path = fragment.substr(7);
+            auto data = load_binary_file(path);
+            program->addStageBinary(mx::Stage::PIXEL, data);
+        } else {
+            program->addStage(mx::Stage::PIXEL, fragment);
+        }
 
         try {
             program->build();

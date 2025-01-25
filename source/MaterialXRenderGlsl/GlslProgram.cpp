@@ -71,6 +71,11 @@ void GlslProgram::addStage(const string& stage, const string& sourceCode)
     _stages[stage] = sourceCode;
 }
 
+void GlslProgram::addStageBinary(const string& stage, std::vector<unsigned char> data)
+{
+    _stageBinaries[stage] = data;
+}
+
 const string& GlslProgram::getStageSourceCode(const string& stage) const
 {
     auto it = _stages.find(stage);
@@ -90,7 +95,7 @@ void GlslProgram::build()
     StringVec errors;
 
     unsigned int stagesBuilt = 0;
-    unsigned int desiredStages = 0;
+    unsigned int desiredStages = _stageBinaries.size();
     for (const auto& it : _stages)
     {
         if (!it.second.empty())
@@ -99,28 +104,34 @@ void GlslProgram::build()
         }
     }
 
-    // Compile vertex shader, if any
-    GLuint vertexShaderId = UNDEFINED_OPENGL_RESOURCE_ID;
-    const string& vertexShaderSource = _stages[Stage::VERTEX];
-    if (!vertexShaderSource.empty())
-    {
-        vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
+    const auto& get_shader = [&](std::string stage, GLuint shaderType) {
+        if (!_stageBinaries.count(stage) && !_stages.count(stage)) {
+            return UNDEFINED_OPENGL_RESOURCE_ID;
+        }
 
-        // Compile vertex shader
-        const char* vertexChar = vertexShaderSource.c_str();
-        glShaderSource(vertexShaderId, 1, &vertexChar, nullptr);
-        glCompileShader(vertexShaderId);
+        GLuint shaderId = glCreateShader(shaderType);
+        if (_stageBinaries.count(stage)) {
+            glShaderBinary(1, &shaderId, GL_SHADER_BINARY_FORMAT_SPIR_V,
+                &_stageBinaries[stage][0], _stageBinaries[stage].size());
+            glSpecializeShader(shaderId, "main", 0, nullptr, nullptr);
+        } else {
+            // Compile vertex shader
+            const string& shaderSource = _stages[stage];
+            const char* vertexChar = shaderSource.c_str();
+            glShaderSource(shaderId, 1, &vertexChar, nullptr);
+            glCompileShader(shaderId);
+        }
 
         // Check vertex shader
-        glGetShaderiv(vertexShaderId, GL_COMPILE_STATUS, &glStatus);
+        glGetShaderiv(shaderId, GL_COMPILE_STATUS, &glStatus);
         if (glStatus == GL_FALSE)
         {
-            errors.push_back("Error in compiling vertex shader:");
-            glGetShaderiv(vertexShaderId, GL_INFO_LOG_LENGTH, &glInfoLogLength);
+            errors.push_back("Error in compiling shader:");
+            glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &glInfoLogLength);
             if (glInfoLogLength > 0)
             {
                 std::vector<char> vsErrorMessage((size_t) glInfoLogLength + 1);
-                glGetShaderInfoLog(vertexShaderId, glInfoLogLength, nullptr, &vsErrorMessage[0]);
+                glGetShaderInfoLog(shaderId, glInfoLogLength, nullptr, &vsErrorMessage[0]);
                 errors.push_back(&vsErrorMessage[0]);
             }
         }
@@ -128,38 +139,12 @@ void GlslProgram::build()
         {
             stagesBuilt++;
         }
-    }
 
-    // Compile fragment shader, if any
-    GLuint fragmentShaderId = UNDEFINED_OPENGL_RESOURCE_ID;
-    const string& fragmentShaderSource = _stages[Stage::PIXEL];
-    if (!fragmentShaderSource.empty())
-    {
-        fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
+        return shaderId;
+    };
 
-        // Compile fragment shader
-        const char* fragmentChar = fragmentShaderSource.c_str();
-        glShaderSource(fragmentShaderId, 1, &fragmentChar, nullptr);
-        glCompileShader(fragmentShaderId);
-
-        // Check fragment shader
-        glGetShaderiv(fragmentShaderId, GL_COMPILE_STATUS, &glStatus);
-        if (glStatus == GL_FALSE)
-        {
-            errors.push_back("Error in compiling fragment shader:");
-            glGetShaderiv(fragmentShaderId, GL_INFO_LOG_LENGTH, &glInfoLogLength);
-            if (glInfoLogLength > 0)
-            {
-                std::vector<char> fsErrorMessage((size_t) glInfoLogLength + 1);
-                glGetShaderInfoLog(fragmentShaderId, glInfoLogLength, nullptr, &fsErrorMessage[0]);
-                errors.push_back(&fsErrorMessage[0]);
-            }
-        }
-        else
-        {
-            stagesBuilt++;
-        }
-    }
+    GLuint vertexShaderId = get_shader(Stage::VERTEX, GL_VERTEX_SHADER);
+    GLuint fragmentShaderId = get_shader(Stage::PIXEL, GL_FRAGMENT_SHADER);
 
     // Link the shader program
     if (stagesBuilt == desiredStages)
