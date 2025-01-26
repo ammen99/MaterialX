@@ -206,6 +206,7 @@ class MX_RENDERGLSL_API GlslProgram
 
     /// Print all attributes to the given stream.
     void printAttributes(std::ostream& outputStream);
+    void copyAttributesAndUniforms(GlslProgramPtr other);
 
     /// @}
 
@@ -213,14 +214,11 @@ class MX_RENDERGLSL_API GlslProgram
     static unsigned int UNDEFINED_OPENGL_RESOURCE_ID;
     static int UNDEFINED_OPENGL_PROGRAM_LOCATION;
 
+    const InputMap& updateUniformsList();
+    const InputMap& updateAttributesList();
+
   protected:
     GlslProgram();
-
-    // Update a list of program input uniforms
-    const InputMap& updateUniformsList();
-
-    // Update a list of program input attributes
-    const InputMap& updateAttributesList();
 
     // Utility to find a uniform value in an uniform list.
     // If uniform cannot be found a null pointer will be return.

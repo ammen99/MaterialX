@@ -7,7 +7,6 @@ if(POLICY CMP0072)
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(spirvcross REQUIRED spirv-cross-c)
 
 if(APPLE)
     find_library(COCOA_FRAMEWORK Cocoa)
@@ -49,8 +48,6 @@ elseif(UNIX)
     target_include_directories(${TARGET_NAME} PRIVATE ${X11_INCLUDE_DIR})
 endif()
 
-target_include_directories(${TARGET_NAME} PRIVATE ${spirvcross_INCLUDE_DIRS})
-
 # Disable OpenGL deprecation warnings on Clang.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(${TARGET_NAME} PRIVATE -Wno-deprecated-declarations)
@@ -83,5 +80,5 @@ elseif(UNIX)
             ${TARGET_NAME}
             OpenGL::GL
             X11::X11
-            X11::Xt ${spirvcross_LIBRARIES} ${spirvcross_LDFLAGS})
+            X11::Xt)
 endif()

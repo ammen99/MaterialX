@@ -150,6 +150,13 @@ class ServerController : public drogon::HttpController<ServerController, false>
             setProgram(material, cached);
         }
 
+        const auto& load_text_file = [] (const std::string& filename) {
+            std::ifstream file(filename);
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            return buffer.str();
+        };
+
         const auto& load_binary_file = [] (const std::string& filename) {
             std::ifstream file(filename, std::ios::binary | std::ios::ate);
             auto size = file.tellg();
@@ -160,24 +167,52 @@ class ServerController : public drogon::HttpController<ServerController, false>
         };
 
         mx::GlslProgramPtr program = mx::GlslProgram::create();
+        mx::GlslProgramPtr textProg;
+
         if (vertex.find("binary:") == 0) {
-            auto path = vertex.substr(7);
-            auto data = load_binary_file(path);
+            int second_splitter = vertex.find(":", 7);
+            auto binary_path = vertex.substr(7, second_splitter - 7);
+            auto text_path = vertex.substr(second_splitter + 1);
+            std::cout << "loading vs binary " << binary_path << " and text " << text_path << std::endl;
+
+            auto data = load_binary_file(binary_path);
             program->addStageBinary(mx::Stage::VERTEX, data);
+
+            textProg = mx::GlslProgram::create();
+            auto text = load_text_file(text_path);
+            textProg->addStage(mx::Stage::VERTEX, text);
         } else {
             program->addStage(mx::Stage::VERTEX, vertex);
         }
 
         if (fragment.find("binary:") == 0) {
-            auto path = fragment.substr(7);
-            auto data = load_binary_file(path);
+            int second_splitter = fragment.find(":", 7);
+            auto binary_path = fragment.substr(7, second_splitter - 7);
+            auto text_path = fragment.substr(second_splitter + 1);
+            std::cout << "loading fs binary " << binary_path << " and text " << text_path << std::endl;
+
+            auto data = load_binary_file(binary_path);
             program->addStageBinary(mx::Stage::PIXEL, data);
+
+            if (!textProg) {
+                std::cout << "binary requires both vertex and frag shaders!" << std::endl;
+                return "binary requires both vertex and frag shaders!";
+            }
+
+            auto text = load_text_file(text_path);
+            textProg->addStage(mx::Stage::PIXEL, text);
         } else {
             program->addStage(mx::Stage::PIXEL, fragment);
         }
 
         try {
             program->build();
+            if (textProg) {
+                textProg->build();
+                textProg->updateAttributesList();
+                textProg->updateUniformsList();
+                program->copyAttributesAndUniforms(textProg);
+            }
         } catch (mx::ExceptionRenderError& e) {
             std::cout << "Failed to compile shader: " << e.what() << std::endl;
             std::string full_error;

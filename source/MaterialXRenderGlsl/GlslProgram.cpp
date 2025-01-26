@@ -13,111 +13,7 @@
 
 #include <MaterialXGenShader/HwShaderGenerator.h>
 #include <MaterialXGenShader/Util.h>
-#include <spirv_cross.hpp>
-#include <spirv_cross_util.hpp>
 #include <iostream>
-
-GLuint spirtypeToGlType(std::string name, spirv_cross::SPIRType type) {
-    GLuint gltype;
-    switch (type.basetype)
-    {
-
-      case spirv_cross::SPIRType::Int: //integer
-        switch (type.vecsize)
-        {
-          case 1:
-            gltype = GL_INT;
-            break;
-          case 2:
-            gltype = GL_INT_VEC2;
-            break;
-          case 3:
-            gltype = GL_INT_VEC3;
-            break;
-          case 4:
-            gltype = GL_INT_VEC4;
-            break;
-        }
-        break;
-      case 8: //unsigned integer
-        switch (type.vecsize)
-        {
-          case 1:
-            gltype = GL_UNSIGNED_INT;
-            break;
-          case 2:
-            gltype = GL_UNSIGNED_INT_VEC2;
-            break;
-          case 3:
-            gltype = GL_UNSIGNED_INT_VEC3;
-            break;
-          case 4:
-            gltype = GL_UNSIGNED_INT_VEC4;
-            break;
-        }
-        break;
-      case 13: //float
-        switch (type.vecsize)
-        {
-          case 1:
-            gltype = GL_FLOAT;
-            break;
-          case 2:
-            gltype = GL_FLOAT_VEC2;
-            break;
-          case 3:
-            gltype = GL_FLOAT_VEC3;
-            break;
-          case 4:
-            gltype = GL_FLOAT_VEC4;
-            break;
-        }
-        break;
-      case spirv_cross::SPIRType::Boolean:
-        switch (type.vecsize)
-        {
-          case 1:
-            gltype = GL_BOOL;
-            break;
-          case 2:
-            gltype = GL_BOOL_VEC2;
-            break;
-          case 3:
-            gltype = GL_BOOL_VEC3;
-            break;
-          case 4:
-            gltype = GL_BOOL_VEC4;
-            break;
-        }
-        break;
-      case spirv_cross::SPIRType::Struct:
-      case spirv_cross::SPIRType::Unknown:
-      case spirv_cross::SPIRType::Void:
-      case spirv_cross::SPIRType::SByte:
-      case spirv_cross::SPIRType::UByte:
-      case spirv_cross::SPIRType::Short:
-      case spirv_cross::SPIRType::UShort:
-      case spirv_cross::SPIRType::Int64:
-      case spirv_cross::SPIRType::UInt64:
-      case spirv_cross::SPIRType::AtomicCounter:
-      case spirv_cross::SPIRType::Half:
-      case spirv_cross::SPIRType::Double:
-      case spirv_cross::SPIRType::Image:
-      case spirv_cross::SPIRType::SampledImage:
-      case spirv_cross::SPIRType::Sampler:
-      case spirv_cross::SPIRType::AccelerationStructure:
-      case spirv_cross::SPIRType::RayQuery:
-      case spirv_cross::SPIRType::ControlPointArray:
-      case spirv_cross::SPIRType::Interpolant:
-      case spirv_cross::SPIRType::Char:
-      case spirv_cross::SPIRType::MeshGridProperties:
-        gltype = GL_INT;
-        std::cout << "unknown type: " << name << " " << type.basetype << " " << type.vecsize << std::endl;
-        break;
-    }
-
-    return gltype;
-}
 
 MATERIALX_NAMESPACE_BEGIN
 
@@ -996,89 +892,8 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
         }
         delete[] uniformName;
     } else {
-        auto data = _stageBinaries[Stage::VERTEX];
-        while (data.size() % 4) data.push_back(0);
-
-        spirv_cross::Compiler compiler_vertex{(uint32_t*)data.data(), data.size() / 4};
-        auto res = compiler_vertex.get_shader_resources();
-        for (const auto& uniform : res.gl_plain_uniforms) {
-            std::string name = compiler_vertex.get_name(uniform.id);
-            GLint uniformLocation = compiler_vertex.get_decoration(uniform.id, spv::DecorationLocation);
-            GLint uni = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniform);
-            GLint uni_id = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniformId);
-            auto type = compiler_vertex.get_type(uniform.base_type_id);
-            GLuint gltype = spirtypeToGlType(name, type);
-            InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
-            _uniformList[name] = inputPtr;
-            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype <<
-                " uni " << uni << " uni_id " << uni_id <<
-                std::endl;
-        }
-
-        data = _stageBinaries[Stage::PIXEL];
-        while (data.size() % 4) data.push_back(0);
-
-        spirv_cross::Compiler compiler_pixel{(uint32_t*)data.data(), data.size() / 4};
-        res = compiler_pixel.get_shader_resources();
-
-
-        const auto& process_shader_uniform = [&] (const spirv_cross::Resource& uniform) {
-            std::string name = compiler_pixel.get_name(uniform.id);
-            GLint uniformLocation = compiler_pixel.get_decoration(uniform.id, spv::DecorationLocation);
-
-            if (name == "u_lightData") {
-                int lightFieldLoc = uniformLocation;
-
-                const auto& add_member = [&] (std::string field, int index, GLuint gltype) {
-                    std::string fieldName = "u_lightData[" + std::to_string(index) + "]." + field;
-                    InputPtr inputPtr = std::make_shared<Input>(lightFieldLoc, gltype, 1, EMPTY_STRING);
-                    _uniformList[fieldName] = inputPtr;
-                    std::cout << "SPIRV Found uniform: " << fieldName << " at input " << lightFieldLoc << " type " << gltype << std::endl;
-                    ++lightFieldLoc;
-                };
-
-                // hack for structs as I don't really know how to parse them
-                for (int i = 0; i < 3; i++) {
-                    add_member("type", i, GL_INT);
-                    add_member("direction", i, GL_FLOAT_VEC3);
-                    add_member("color", i, GL_FLOAT_VEC3);
-                    add_member("intensity", i, GL_FLOAT);
-                }
-            } else {
-                auto type = compiler_pixel.get_type(uniform.base_type_id);
-                GLuint gltype = spirtypeToGlType(name, type);
-                InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
-                GLint uni = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniform);
-                GLint uni_id = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniformId);
-                _uniformList[name] = inputPtr;
-                std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype <<
-                    " uni " << uni << " uni_id " << uni_id << std::endl;
-            }
-        };
-
-        for (const auto& image : res.sampled_images) {
-            process_shader_uniform(image);
-        }
-
-        for (const auto& uniform : res.gl_plain_uniforms) {
-            process_shader_uniform(uniform);
-        }
-
-        std::cout << "what opengl sees however: " << _programId << std::endl;
-        // Scan for textures
-        int uniformCount = -1;
-        int uniformSize = -1;
-        GLenum uniformType = 0;
-        int maxNameLength = 0;
-        glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &uniformCount);
-        glGetProgramiv(_programId, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
-        char* uniformName = new char[maxNameLength];
-        for (int i = 0; i < uniformCount; i++)
-        {
-            glGetActiveUniform(_programId, GLuint(i), maxNameLength, nullptr, &uniformSize, &uniformType, uniformName);
-            std::cout << "uniform id " << i << " has size " << uniformSize << " and type " << uniformType << std::endl;
-        }
-        delete[] uniformName;
+        std::cout << "Need to copy from normal source!" << std::endl;
+        return _uniformList;
     }
 
     if (_shader)
@@ -1256,37 +1071,8 @@ const GlslProgram::InputMap& GlslProgram::updateAttributesList()
     }
 
     if (!_stageBinaries.empty()) {
-        auto data = _stageBinaries[Stage::VERTEX];
-        while (data.size() % 4) data.push_back(0);
-
-        spirv_cross::Compiler compiler{(uint32_t*)data.data(), data.size() / 4};
-        auto res = compiler.get_shader_resources();
-        for (auto& f : res.stage_inputs) {
-            auto name = f.name;
-            auto loc = compiler.get_decoration(f.id, spv::DecorationLocation);
-            auto type = spirtypeToGlType(name, compiler.get_type(f.base_type_id));
-            InputPtr inputPtr = std::make_shared<Input>(loc, type, 1, EMPTY_STRING);
-
-            std::cout << "Found attribute: " << name << " at input " << loc << " with type " << type << std::endl;
-
-            // Attempt to pull out the set number for specific attributes
-            //
-            string sattributeName(name);
-            const string colorSet(HW::IN_COLOR + "_");
-            const string uvSet(HW::IN_TEXCOORD + "_");
-            if (string::npos != sattributeName.find(colorSet))
-            {
-                string setNumber = sattributeName.substr(colorSet.size(), sattributeName.size());
-                inputPtr->value = Value::createValueFromStrings(setNumber, getTypeString<int>());
-            }
-            else if (string::npos != sattributeName.find(uvSet))
-            {
-                string setNumber = sattributeName.substr(uvSet.size(), sattributeName.size());
-                inputPtr->value = Value::createValueFromStrings(setNumber, getTypeString<int>());
-            }
-
-            _attributeList[sattributeName] = inputPtr;
-        }
+        std::cout << "Need to copy from normal source!" << std::endl;
+        return _attributeList;
     } else {
         GLint numAttributes = 0;
         GLint maxNameLength = 0;
@@ -1462,6 +1248,11 @@ void GlslProgram::printAttributes(std::ostream& outputStream)
             outputStream << ". Value: " << value;
         outputStream << "." << std::endl;
     }
+}
+
+void GlslProgram::copyAttributesAndUniforms(GlslProgramPtr other) {
+    this->_uniformList = other->_uniformList;
+    this->_attributeList = other->_attributeList;
 }
 
 MATERIALX_NAMESPACE_END
