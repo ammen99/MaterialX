@@ -253,6 +253,7 @@ void GlslProgram::build()
     if (stagesBuilt == desiredStages)
     {
         _programId = glCreateProgram();
+        std::cout << "created program " << _programId << "(binary? " << (_stageBinaries.size() > 0) << std::endl;
         glAttachShader(_programId, vertexShaderId);
         glAttachShader(_programId, fragmentShaderId);
         glLinkProgram(_programId);
@@ -807,6 +808,9 @@ void GlslProgram::bindUniform(const string& name, ConstValuePtr value, bool erro
             }
             return;
         }
+        if (name[0] != 'u') {
+            std::cout <<  "binding " << name << " at " << location << " value " << value->getValueString() << std::endl;
+        }
         bindUniformLocation(location, value);
     }
 }
@@ -1000,11 +1004,15 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
         for (const auto& uniform : res.gl_plain_uniforms) {
             std::string name = compiler_vertex.get_name(uniform.id);
             GLint uniformLocation = compiler_vertex.get_decoration(uniform.id, spv::DecorationLocation);
+            GLint uni = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniform);
+            GLint uni_id = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniformId);
             auto type = compiler_vertex.get_type(uniform.base_type_id);
             GLuint gltype = spirtypeToGlType(name, type);
             InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
             _uniformList[name] = inputPtr;
-            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype << std::endl;
+            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype <<
+                " uni " << uni << " uni_id " << uni_id <<
+                std::endl;
         }
 
         data = _stageBinaries[Stage::PIXEL];
@@ -1012,16 +1020,65 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
 
         spirv_cross::Compiler compiler_pixel{(uint32_t*)data.data(), data.size() / 4};
         res = compiler_pixel.get_shader_resources();
-        for (const auto& uniform : res.gl_plain_uniforms) {
+
+
+        const auto& process_shader_uniform = [&] (const spirv_cross::Resource& uniform) {
             std::string name = compiler_pixel.get_name(uniform.id);
             GLint uniformLocation = compiler_pixel.get_decoration(uniform.id, spv::DecorationLocation);
-            auto type = compiler_pixel.get_type(uniform.base_type_id);
-            GLuint gltype = spirtypeToGlType(name, type);
-            InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
-            _uniformList[name] = inputPtr;
-            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype << std::endl;
+
+            if (name == "u_lightData") {
+                int lightFieldLoc = uniformLocation;
+
+                const auto& add_member = [&] (std::string field, int index, GLuint gltype) {
+                    std::string fieldName = "u_lightData[" + std::to_string(index) + "]." + field;
+                    InputPtr inputPtr = std::make_shared<Input>(lightFieldLoc, gltype, 1, EMPTY_STRING);
+                    _uniformList[fieldName] = inputPtr;
+                    std::cout << "SPIRV Found uniform: " << fieldName << " at input " << lightFieldLoc << " type " << gltype << std::endl;
+                    ++lightFieldLoc;
+                };
+
+                // hack for structs as I don't really know how to parse them
+                for (int i = 0; i < 3; i++) {
+                    add_member("type", i, GL_INT);
+                    add_member("direction", i, GL_FLOAT_VEC3);
+                    add_member("color", i, GL_FLOAT_VEC3);
+                    add_member("intensity", i, GL_FLOAT);
+                }
+            } else {
+                auto type = compiler_pixel.get_type(uniform.base_type_id);
+                GLuint gltype = spirtypeToGlType(name, type);
+                InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
+                GLint uni = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniform);
+                GLint uni_id = compiler_vertex.get_decoration(uniform.id, spv::DecorationUniformId);
+                _uniformList[name] = inputPtr;
+                std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype <<
+                    " uni " << uni << " uni_id " << uni_id << std::endl;
+            }
+        };
+
+        for (const auto& image : res.sampled_images) {
+            process_shader_uniform(image);
         }
 
+        for (const auto& uniform : res.gl_plain_uniforms) {
+            process_shader_uniform(uniform);
+        }
+
+        std::cout << "what opengl sees however: " << _programId << std::endl;
+        // Scan for textures
+        int uniformCount = -1;
+        int uniformSize = -1;
+        GLenum uniformType = 0;
+        int maxNameLength = 0;
+        glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &uniformCount);
+        glGetProgramiv(_programId, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
+        char* uniformName = new char[maxNameLength];
+        for (int i = 0; i < uniformCount; i++)
+        {
+            glGetActiveUniform(_programId, GLuint(i), maxNameLength, nullptr, &uniformSize, &uniformType, uniformName);
+            std::cout << "uniform id " << i << " has size " << uniformSize << " and type " << uniformType << std::endl;
+        }
+        delete[] uniformName;
     }
 
     if (_shader)
