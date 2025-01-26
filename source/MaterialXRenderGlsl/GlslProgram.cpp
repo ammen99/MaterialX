@@ -13,8 +13,111 @@
 
 #include <MaterialXGenShader/HwShaderGenerator.h>
 #include <MaterialXGenShader/Util.h>
-
+#include <spirv_cross.hpp>
+#include <spirv_cross_util.hpp>
 #include <iostream>
+
+GLuint spirtypeToGlType(std::string name, spirv_cross::SPIRType type) {
+    GLuint gltype;
+    switch (type.basetype)
+    {
+
+      case spirv_cross::SPIRType::Int: //integer
+        switch (type.vecsize)
+        {
+          case 1:
+            gltype = GL_INT;
+            break;
+          case 2:
+            gltype = GL_INT_VEC2;
+            break;
+          case 3:
+            gltype = GL_INT_VEC3;
+            break;
+          case 4:
+            gltype = GL_INT_VEC4;
+            break;
+        }
+        break;
+      case 8: //unsigned integer
+        switch (type.vecsize)
+        {
+          case 1:
+            gltype = GL_UNSIGNED_INT;
+            break;
+          case 2:
+            gltype = GL_UNSIGNED_INT_VEC2;
+            break;
+          case 3:
+            gltype = GL_UNSIGNED_INT_VEC3;
+            break;
+          case 4:
+            gltype = GL_UNSIGNED_INT_VEC4;
+            break;
+        }
+        break;
+      case 13: //float
+        switch (type.vecsize)
+        {
+          case 1:
+            gltype = GL_FLOAT;
+            break;
+          case 2:
+            gltype = GL_FLOAT_VEC2;
+            break;
+          case 3:
+            gltype = GL_FLOAT_VEC3;
+            break;
+          case 4:
+            gltype = GL_FLOAT_VEC4;
+            break;
+        }
+        break;
+      case spirv_cross::SPIRType::Boolean:
+        switch (type.vecsize)
+        {
+          case 1:
+            gltype = GL_BOOL;
+            break;
+          case 2:
+            gltype = GL_BOOL_VEC2;
+            break;
+          case 3:
+            gltype = GL_BOOL_VEC3;
+            break;
+          case 4:
+            gltype = GL_BOOL_VEC4;
+            break;
+        }
+        break;
+      case spirv_cross::SPIRType::Struct:
+      case spirv_cross::SPIRType::Unknown:
+      case spirv_cross::SPIRType::Void:
+      case spirv_cross::SPIRType::SByte:
+      case spirv_cross::SPIRType::UByte:
+      case spirv_cross::SPIRType::Short:
+      case spirv_cross::SPIRType::UShort:
+      case spirv_cross::SPIRType::Int64:
+      case spirv_cross::SPIRType::UInt64:
+      case spirv_cross::SPIRType::AtomicCounter:
+      case spirv_cross::SPIRType::Half:
+      case spirv_cross::SPIRType::Double:
+      case spirv_cross::SPIRType::Image:
+      case spirv_cross::SPIRType::SampledImage:
+      case spirv_cross::SPIRType::Sampler:
+      case spirv_cross::SPIRType::AccelerationStructure:
+      case spirv_cross::SPIRType::RayQuery:
+      case spirv_cross::SPIRType::ControlPointArray:
+      case spirv_cross::SPIRType::Interpolant:
+      case spirv_cross::SPIRType::Char:
+      case spirv_cross::SPIRType::MeshGridProperties:
+        gltype = GL_INT;
+        std::cout << "unknown type: " << name << " " << type.basetype << " " << type.vecsize << std::endl;
+        break;
+    }
+
+    return gltype;
+}
 
 MATERIALX_NAMESPACE_BEGIN
 
@@ -867,25 +970,59 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
         throw ExceptionRenderError("Cannot parse for uniforms without a valid program");
     }
 
-    // Scan for textures
-    int uniformCount = -1;
-    int uniformSize = -1;
-    GLenum uniformType = 0;
-    int maxNameLength = 0;
-    glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &uniformCount);
-    glGetProgramiv(_programId, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
-    char* uniformName = new char[maxNameLength];
-    for (int i = 0; i < uniformCount; i++)
-    {
-        glGetActiveUniform(_programId, GLuint(i), maxNameLength, nullptr, &uniformSize, &uniformType, uniformName);
-        GLint uniformLocation = glGetUniformLocation(_programId, uniformName);
-        if (uniformLocation >= 0)
+    if (_stageBinaries.empty()) {
+        // Scan for textures
+        int uniformCount = -1;
+        int uniformSize = -1;
+        GLenum uniformType = 0;
+        int maxNameLength = 0;
+        glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &uniformCount);
+        glGetProgramiv(_programId, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
+        char* uniformName = new char[maxNameLength];
+        for (int i = 0; i < uniformCount; i++)
         {
-            InputPtr inputPtr = std::make_shared<Input>(uniformLocation, uniformType, uniformSize, EMPTY_STRING);
-            _uniformList[string(uniformName)] = inputPtr;
+            glGetActiveUniform(_programId, GLuint(i), maxNameLength, nullptr, &uniformSize, &uniformType, uniformName);
+            GLint uniformLocation = glGetUniformLocation(_programId, uniformName);
+            if (uniformLocation >= 0)
+            {
+                InputPtr inputPtr = std::make_shared<Input>(uniformLocation, uniformType, uniformSize, EMPTY_STRING);
+                _uniformList[string(uniformName)] = inputPtr;
+                std::cout << "Found uniform: " << uniformName << " at input " << uniformLocation << " type " << uniformType << std::endl;
+            }
         }
+        delete[] uniformName;
+    } else {
+        auto data = _stageBinaries[Stage::VERTEX];
+        while (data.size() % 4) data.push_back(0);
+
+        spirv_cross::Compiler compiler_vertex{(uint32_t*)data.data(), data.size() / 4};
+        auto res = compiler_vertex.get_shader_resources();
+        for (const auto& uniform : res.gl_plain_uniforms) {
+            std::string name = compiler_vertex.get_name(uniform.id);
+            GLint uniformLocation = compiler_vertex.get_decoration(uniform.id, spv::DecorationLocation);
+            auto type = compiler_vertex.get_type(uniform.base_type_id);
+            GLuint gltype = spirtypeToGlType(name, type);
+            InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
+            _uniformList[name] = inputPtr;
+            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype << std::endl;
+        }
+
+        data = _stageBinaries[Stage::PIXEL];
+        while (data.size() % 4) data.push_back(0);
+
+        spirv_cross::Compiler compiler_pixel{(uint32_t*)data.data(), data.size() / 4};
+        res = compiler_pixel.get_shader_resources();
+        for (const auto& uniform : res.gl_plain_uniforms) {
+            std::string name = compiler_pixel.get_name(uniform.id);
+            GLint uniformLocation = compiler_pixel.get_decoration(uniform.id, spv::DecorationLocation);
+            auto type = compiler_pixel.get_type(uniform.base_type_id);
+            GLuint gltype = spirtypeToGlType(name, type);
+            InputPtr inputPtr = std::make_shared<Input>(uniformLocation, gltype, 1, EMPTY_STRING);
+            _uniformList[name] = inputPtr;
+            std::cout << "SPIRV Found uniform: " << name << " at input " << uniformLocation << " type " << gltype << std::endl;
+        }
+
     }
-    delete[] uniformName;
 
     if (_shader)
     {
@@ -1061,25 +1198,23 @@ const GlslProgram::InputMap& GlslProgram::updateAttributesList()
         throw ExceptionRenderError("Cannot parse for attributes without a valid program");
     }
 
-    GLint numAttributes = 0;
-    GLint maxNameLength = 0;
-    glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTES, &numAttributes);
-    glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxNameLength);
-    char* attributeName = new char[maxNameLength];
+    if (!_stageBinaries.empty()) {
+        auto data = _stageBinaries[Stage::VERTEX];
+        while (data.size() % 4) data.push_back(0);
 
-    for (int i = 0; i < numAttributes; i++)
-    {
-        GLint attributeSize = 0;
-        GLenum attributeType = 0;
-        glGetActiveAttrib(_programId, GLuint(i), maxNameLength, nullptr, &attributeSize, &attributeType, attributeName);
-        GLint attributeLocation = glGetAttribLocation(_programId, attributeName);
-        if (attributeLocation >= 0)
-        {
-            InputPtr inputPtr = std::make_shared<Input>(attributeLocation, attributeType, attributeSize, EMPTY_STRING);
+        spirv_cross::Compiler compiler{(uint32_t*)data.data(), data.size() / 4};
+        auto res = compiler.get_shader_resources();
+        for (auto& f : res.stage_inputs) {
+            auto name = f.name;
+            auto loc = compiler.get_decoration(f.id, spv::DecorationLocation);
+            auto type = spirtypeToGlType(name, compiler.get_type(f.base_type_id));
+            InputPtr inputPtr = std::make_shared<Input>(loc, type, 1, EMPTY_STRING);
+
+            std::cout << "Found attribute: " << name << " at input " << loc << " with type " << type << std::endl;
 
             // Attempt to pull out the set number for specific attributes
             //
-            string sattributeName(attributeName);
+            string sattributeName(name);
             const string colorSet(HW::IN_COLOR + "_");
             const string uvSet(HW::IN_TEXCOORD + "_");
             if (string::npos != sattributeName.find(colorSet))
@@ -1095,8 +1230,44 @@ const GlslProgram::InputMap& GlslProgram::updateAttributesList()
 
             _attributeList[sattributeName] = inputPtr;
         }
+    } else {
+        GLint numAttributes = 0;
+        GLint maxNameLength = 0;
+        glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTES, &numAttributes);
+        glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxNameLength);
+        char* attributeName = new char[maxNameLength];
+
+        for (int i = 0; i < numAttributes; i++)
+        {
+            GLint attributeSize = 0;
+            GLenum attributeType = 0;
+            glGetActiveAttrib(_programId, GLuint(i), maxNameLength, nullptr, &attributeSize, &attributeType, attributeName);
+            GLint attributeLocation = glGetAttribLocation(_programId, attributeName);
+            if (attributeLocation >= 0)
+            {
+                InputPtr inputPtr = std::make_shared<Input>(attributeLocation, attributeType, attributeSize, EMPTY_STRING);
+
+                // Attempt to pull out the set number for specific attributes
+                //
+                string sattributeName(attributeName);
+                const string colorSet(HW::IN_COLOR + "_");
+                const string uvSet(HW::IN_TEXCOORD + "_");
+                if (string::npos != sattributeName.find(colorSet))
+                {
+                    string setNumber = sattributeName.substr(colorSet.size(), sattributeName.size());
+                    inputPtr->value = Value::createValueFromStrings(setNumber, getTypeString<int>());
+                }
+                else if (string::npos != sattributeName.find(uvSet))
+                {
+                    string setNumber = sattributeName.substr(uvSet.size(), sattributeName.size());
+                    inputPtr->value = Value::createValueFromStrings(setNumber, getTypeString<int>());
+                }
+
+                _attributeList[sattributeName] = inputPtr;
+            }
+        }
+        delete[] attributeName;
     }
-    delete[] attributeName;
 
     if (_shader)
     {

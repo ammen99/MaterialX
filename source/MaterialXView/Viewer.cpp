@@ -2241,8 +2241,6 @@ bool Viewer::mouse_motion_event(const ng::Vector2i& p,
         return true;
     }
 
-    std::cout << this->getCameraPosition()[0] << ", " << this->getCameraPosition()[1] << ", " << this->getCameraPosition()[2] << std::endl;
-
     mx::Vector2 pos((float) p.x(), (float) p.y());
     if (_viewCamera->applyArcballMotion(pos))
     {
