@@ -3,7 +3,6 @@ option(MATERIALX_NANOGUI_EXTERNAL "Build aginst an external install of NanoGUI (
 add_subdirectory(drogon)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(spirvcross REQUIRED spirv-cross-c)
 
 set(MATERIALXVIEW_RENDER_BACKEND_DEFINITIONS "")
 
@@ -139,7 +138,7 @@ target_link_libraries(
     ${MATERIALX_LIBRARIES}
     ${NANOGUI_LIBRARIES}
     ${NANOGUI_EXTRA_LIBS}
-    drogon ${spirvcross_LIBRARIES} ${spirvcross_LDFLAGS} spirv-cross-cpp spirv-cross-core)
+    drogon)
 
 target_include_directories(
     MaterialXView
