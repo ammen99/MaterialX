@@ -70,9 +70,9 @@ void GlslProgram::addStage(const string& stage, const string& sourceCode)
     _stages[stage] = sourceCode;
 }
 
-void GlslProgram::addStageBinary(const string& stage, std::vector<unsigned char> data)
+void GlslProgram::addStageBinary(const string& stage, unsigned int shaderId)
 {
-    _stageBinaries[stage] = data;
+    _stageBinaryShaders[stage] = shaderId;
 }
 
 const string& GlslProgram::getStageSourceCode(const string& stage) const
@@ -94,7 +94,7 @@ void GlslProgram::build()
     StringVec errors;
 
     unsigned int stagesBuilt = 0;
-    unsigned int desiredStages = _stageBinaries.size();
+    unsigned int desiredStages = _stageBinaryShaders.size();
     for (const auto& it : _stages)
     {
         if (!it.second.empty())
@@ -104,16 +104,16 @@ void GlslProgram::build()
     }
 
     const auto& get_shader = [&](std::string stage, GLuint shaderType) {
-        if (!_stageBinaries.count(stage) && !_stages.count(stage)) {
+        if (!_stageBinaryShaders.count(stage) && !_stages.count(stage)) {
             return UNDEFINED_OPENGL_RESOURCE_ID;
         }
 
-        GLuint shaderId = glCreateShader(shaderType);
-        if (_stageBinaries.count(stage)) {
-            glShaderBinary(1, &shaderId, GL_SHADER_BINARY_FORMAT_SPIR_V,
-                &_stageBinaries[stage][0], _stageBinaries[stage].size());
-            glSpecializeShader(shaderId, "main", 0, nullptr, nullptr);
+        GLuint shaderId;
+
+        if (_stageBinaryShaders.count(stage)) {
+            shaderId = _stageBinaryShaders[stage];
         } else {
+            shaderId = glCreateShader(shaderType);
             // Compile vertex shader
             const string& shaderSource = _stages[stage];
             const char* vertexChar = shaderSource.c_str();
@@ -149,7 +149,6 @@ void GlslProgram::build()
     if (stagesBuilt == desiredStages)
     {
         _programId = glCreateProgram();
-        std::cout << "created program " << _programId << "(binary? " << (_stageBinaries.size() > 0) << std::endl;
         glAttachShader(_programId, vertexShaderId);
         glAttachShader(_programId, fragmentShaderId);
         glLinkProgram(_programId);
@@ -704,9 +703,6 @@ void GlslProgram::bindUniform(const string& name, ConstValuePtr value, bool erro
             }
             return;
         }
-        if (name[0] != 'u') {
-            std::cout <<  "binding " << name << " at " << location << " value " << value->getValueString() << std::endl;
-        }
         bindUniformLocation(location, value);
     }
 }
@@ -870,7 +866,7 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
         throw ExceptionRenderError("Cannot parse for uniforms without a valid program");
     }
 
-    if (_stageBinaries.empty()) {
+    if (_stageBinaryShaders.empty()) {
         // Scan for textures
         int uniformCount = -1;
         int uniformSize = -1;
@@ -887,7 +883,6 @@ const GlslProgram::InputMap& GlslProgram::updateUniformsList()
             {
                 InputPtr inputPtr = std::make_shared<Input>(uniformLocation, uniformType, uniformSize, EMPTY_STRING);
                 _uniformList[string(uniformName)] = inputPtr;
-                std::cout << "Found uniform: " << uniformName << " at input " << uniformLocation << " type " << uniformType << std::endl;
             }
         }
         delete[] uniformName;
@@ -1070,7 +1065,7 @@ const GlslProgram::InputMap& GlslProgram::updateAttributesList()
         throw ExceptionRenderError("Cannot parse for attributes without a valid program");
     }
 
-    if (!_stageBinaries.empty()) {
+    if (!_stageBinaryShaders.empty()) {
         std::cout << "Need to copy from normal source!" << std::endl;
         return _attributeList;
     } else {

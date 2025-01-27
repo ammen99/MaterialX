@@ -52,7 +52,7 @@ class MX_RENDERGLSL_API GlslProgram
     /// @param stage Name of the shader stage.
     /// @param sourceCode Source code of the shader stage.
     void addStage(const string& stage, const string& sourceCode);
-    void addStageBinary(const string& stage, std::vector<unsigned char> data);
+    void addStageBinary(const string& stage, unsigned int shaderId);
 
     /// Get source code string for a given stage.
     /// @return Shader stage string. String is empty if not found.
@@ -238,7 +238,7 @@ class MX_RENDERGLSL_API GlslProgram
     // Stages used to create program
     // Map of stage name and its source code
     StringMap _stages;
-    std::map<std::string, std::vector<unsigned char>> _stageBinaries;
+    std::map<std::string, unsigned int> _stageBinaryShaders;
 
     // Generated program. A non-zero number indicates a valid shader program.
     unsigned int _programId;

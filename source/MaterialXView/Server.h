@@ -1,5 +1,6 @@
 #pragma once
 
+#include <MaterialXRenderGlsl/External/Glad/glad.h>
 #include "GLFW/glfw3.h"
 #include <thread>
 #include <drogon/drogon.h>
@@ -176,7 +177,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
             std::cout << "loading vs binary " << binary_path << " and text " << text_path << std::endl;
 
             auto data = load_binary_file(binary_path);
-            program->addStageBinary(mx::Stage::VERTEX, data);
+            program->addStageBinary(mx::Stage::VERTEX, ng::doBinaryShader(data, GL_VERTEX_SHADER));
 
             textProg = mx::GlslProgram::create();
             auto text = load_text_file(text_path);
@@ -192,7 +193,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
             std::cout << "loading fs binary " << binary_path << " and text " << text_path << std::endl;
 
             auto data = load_binary_file(binary_path);
-            program->addStageBinary(mx::Stage::PIXEL, data);
+            program->addStageBinary(mx::Stage::PIXEL, ng::doBinaryShader(data, GL_FRAGMENT_SHADER));
 
             if (!textProg) {
                 std::cout << "binary requires both vertex and frag shaders!" << std::endl;
@@ -587,6 +588,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
         ng::async([=] () mutable
         {
             std::cout << "Dispatching request for set shader" << std::endl;
+
             callback(set_shader_from_json(*req));
         });
     }

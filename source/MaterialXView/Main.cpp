@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "Server.h"
 #include <MaterialXView/Viewer.h>
 
 #include <MaterialXRender/Util.h>
 #include <MaterialXFormat/Util.h>
 #include <MaterialXCore/Util.h>
-#include "Server.h"
 
 #include <iostream>
 
