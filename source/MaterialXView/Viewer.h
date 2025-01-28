@@ -175,6 +175,11 @@ class Viewer : public ng::Screen
         this->_renderTransparency = enable;
     }
 
+    void setDoubleSidedEnabled(bool enable)
+    {
+        this->_renderDoubleSided = enable;
+    }
+
     // Reset frame timing after a blocking event.
     void resetFrameTiming()
     {
