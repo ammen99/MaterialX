@@ -276,6 +276,10 @@ class Viewer : public ng::Screen
     int overdraw_counter = 0;
     GLuint64 last_timer_result = 0;
 
+    int fb_width = 0, fb_height = 0;
+    GLuint framebuffer = -1;
+    GLuint color0;
+
     std::optional<nanogui::Vector2i> requestedRenderResolution;
     mx::ImagePtr requestedRender = nullptr;
 

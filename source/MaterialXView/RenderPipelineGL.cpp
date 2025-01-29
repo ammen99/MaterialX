@@ -571,7 +571,7 @@ void GLRenderPipeline::bakeTextures()
 
 mx::ImagePtr GLRenderPipeline::getFrameImage()
 {
-    glFlush();
+    glFinish();
 
     const auto& size = _viewer->m_size;
     const auto& pixel_ratio = _viewer->m_pixel_ratio;
@@ -582,6 +582,7 @@ mx::ImagePtr GLRenderPipeline::getFrameImage()
     image->createResourceBuffer();
 
     // Read pixels into the image buffer.
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, image->getWidth(), image->getHeight(), GL_RGB, GL_UNSIGNED_BYTE, image->getResourceBuffer());
 
     return image;

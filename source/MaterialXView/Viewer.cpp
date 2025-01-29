@@ -2151,7 +2151,15 @@ void Viewer::_finish_frame()
     if (requestedRenderResolution.has_value()) {
         if (this->size() == requestedRenderResolution.value()) {
             requestedRenderResolution.reset();
+
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->framebuffer);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+            glBlitFramebuffer(0, 0, this->size().x(), this->size().y(),
+                0, 0, this->size().x(), this->size().y(), GL_COLOR_BUFFER_BIT, GL_LINEAR);
+            glBindFramebuffer(GL_FRAMEBUFFER, this->framebuffer);
             this->requestedRender = _renderPipeline->getFrameImage();
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
 
@@ -2192,6 +2200,35 @@ void Viewer::_finish_frame()
 
 void Viewer::draw_contents()
 {
+    int w, h;
+    glfwGetFramebufferSize(this->glfw_window(), &w, &h);
+    if (this->fb_width != w || this->fb_height != h) {
+        if (this->framebuffer == -1) {
+            glGenFramebuffers(1, &this->framebuffer);
+            glGenTextures(1, &this->color0);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, this->framebuffer);
+            glBindTexture(GL_TEXTURE_2D, this->color0);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->color0, 0);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, this->color0);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glBindFramebuffer(GL_FRAMEBUFFER, this->framebuffer);
+        }
+
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        this->fb_width = w;
+        this->fb_height = h;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w, h);
     _prepare_frame();
 
     // Render the current frame.
