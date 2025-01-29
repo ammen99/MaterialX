@@ -50,6 +50,7 @@ const std::string options =
     "    --terminator [STRING]          Specify to enforce the given terminator string for file prefixes\n"
     "    --transparency [BOOLEAN]       Specify whether transparency should be enabled by default\n"
     "    --double-sided [BOOLEAN]       Specify whether to render double-sided by default\n"
+    "    --enable-lookat                Enable lookAt uniform reporting\n"
     "    --disable-mu                   Disable reporting uniforms coming from materials\n"
     "    --help                         Display the complete list of command-line options\n";
 
@@ -112,6 +113,7 @@ int main(int argc, char* const argv[])
     bool enableTransparencyByDefault = false;
     bool enableDoubleSidedByDefault = true;
     bool disableMaterialUniforms = false;
+    bool enableLookAt = false;
 
     for (size_t i = 0; i < tokens.size(); i++)
     {
@@ -273,6 +275,10 @@ int main(int argc, char* const argv[])
         {
             parseToken(nextToken, "boolean", disableMaterialUniforms);
         }
+        else if (token == "--enable-lookat")
+        {
+            parseToken(nextToken, "boolean", enableLookAt);
+        }
         else if (token == "--help")
         {
             std::cout << " MaterialXView version " << mx::getVersionString() << std::endl;
@@ -351,7 +357,7 @@ int main(int argc, char* const argv[])
 
         {
             Server webServer;
-            webServer.start_server(viewer, serverPort, disableMaterialUniforms);
+            webServer.start_server(viewer, serverPort, disableMaterialUniforms, enableLookAt);
             ng::mainloop(refresh);
         }
     }
