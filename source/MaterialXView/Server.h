@@ -209,6 +209,7 @@ class ServerController : public drogon::HttpController<ServerController, false>
 
             if (resetUniforms) {
                 viewer->setCameraPosition(DEFAULT_CAMERA_POSITION);
+                viewer->setCameraTarget(mx::Vector3(0, 0, 0));
             }
 
             callback(drogon::HttpResponse::newHttpResponse());
@@ -375,6 +376,10 @@ class ServerController : public drogon::HttpController<ServerController, false>
             cam["value"].append(viewer->getCameraPosition()[2]);
             r.append(cam);
 
+            auto lookat = vecUniformToJson("lookAt", 1, 0, 1, "lookAt");
+            lookat["value"] = 0;
+            r.append(lookat);
+
             if (auto material = viewer->getSelectedMaterial())
             {
                 if (material->getPublicUniforms() && !this->disableMaterialUniforms)
@@ -434,8 +439,30 @@ class ServerController : public drogon::HttpController<ServerController, false>
                     return resp;
                 }
 
+                std::cout << "Setting camera" << std::endl;
+
                 viewer->setCameraPosition(mx::Vector3(
                         uniformValue["value"][0].asDouble(), uniformValue["value"][1].asDouble(), uniformValue["value"][2].asDouble()));
+            }
+
+            if (name == "lookAt") {
+                if (!uniformValue["value"].isArray() || uniformValue["value"].size() != 1 || !uniformValue["value"][0].isDouble()) {
+                    auto resp = drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
+                            drogon::ContentType::CT_TEXT_HTML);
+                    resp->setBody("Invalid request: wrong syntax (lookAt should be a [float]!)");
+                    return resp;
+                }
+
+                std::vector<mx::Vector3> dirs = {
+                    {0, 0, 0},
+                    {1.0, 0, 0},
+                    {-1.0, 0, 0},
+                    {0, 0, 1.0},
+                    {0, 0, -1.0},
+                };
+
+                int d = std::min(int(uniformValue["value"][0].asDouble() * dirs.size()), int(dirs.size()) - 1);
+                viewer->setCameraTarget(dirs[d]);
             }
 
             if (auto uniform = material->findUniform(name))
