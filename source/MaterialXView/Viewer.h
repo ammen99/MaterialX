@@ -233,6 +233,11 @@ class Viewer : public ng::Screen
         return nullptr;
     }
 
+    void hideUI() {
+        if (_window)
+            _window->set_visible(false);
+    }
+
     // Return the selected mesh partition.
     mx::MeshPartitionPtr getSelectedGeometry() const
     {

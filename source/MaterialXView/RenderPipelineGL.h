@@ -7,7 +7,9 @@
 #define RENDER_PIPELINE_GL_H
 
 #include <MaterialXView/RenderPipeline.h>
+#include <MaterialXView/Common.h>
 #include <optional>
+
 
 class Viewer;
 using GLRenderPipelinePtr = std::shared_ptr<class GLRenderPipeline>;

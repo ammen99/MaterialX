@@ -6,10 +6,22 @@
 #include <drogon/utils/Utilities.h>
 #include <iostream>
 #include <json/json.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "Common.h"
+
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <io.h> // For _close(), if needed
+#else
+    #include <sys/mman.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    #include <unistd.h> // For close()
+    #include <errno.h>
+    #include <string.h> // For strerror()
+#endif
+
+
 
 #define _ << " " <<
 #define debug(x) #x << " = " << x
@@ -566,22 +578,27 @@ class ServerController : public drogon::HttpController<ServerController, false>
         });
     }
 
-    void screenshot(const drogon::HttpRequestPtr& _req,
-        std::function<void (const drogon::HttpResponsePtr &)> &&callback)
+   void screenshot(const drogon::HttpRequestPtr& _req,
+                    std::function<void(const drogon::HttpResponsePtr&)>&& callback)
     {
         auto req = _req->getJsonObject();
-        if (!req) {
+        if (!req)
+        {
             std::cout << "Invalid request: /screenshot" << std::endl;
-            callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                    drogon::ContentType::CT_TEXT_HTML));
+            callback(drogon::HttpResponse::newHttpResponse(
+                drogon::k400BadRequest, drogon::ContentType::CT_TEXT_HTML));
             return;
         }
 
         int w = req->get("width", viewer->width()).asInt();
         int h = req->get("height", viewer->height()).asInt();
-        //std::cout << "Pending screenshot: " << " width=" << w << " height=" << h << " " << glfwGetTime() << std::endl;
 
-        ng::async([=] () mutable {
+        // Run the heavy lifting asynchronously
+        ng::async([=]() mutable
+        {
+            // -------------------------
+            // 1) If "variants" is given
+            // -------------------------
             if (req->isMember("variants") &&
                 req->get("variants", Json::nullValue).isArray())
             {
@@ -589,91 +606,189 @@ class ServerController : public drogon::HttpController<ServerController, false>
                 auto variants = req->get("variants", Json::nullValue);
                 size_t offset = 0;
 
-                int mapfd = -1;
-                void *mapptr = nullptr;
+                // Common variables
                 size_t mapfile_size = w * h * 3 * variants.size();
 
-                if (req->isMember("mapfile") and req->get("mapfile", Json::nullValue).isString()) {
+                // These are only used on Linux/macOS
+#ifndef _WIN32
+                int mapfd = -1;
+#else
+                HANDLE hMapFile;
+#endif
+                void* mapptr = nullptr;
+
+                // ------------------------------------------------
+                // 2) Check if "mapfile" is requested (shared memory)
+                // ------------------------------------------------
+                // NOTE: 'and' => '&&'
+                if (req->isMember("mapfile") && req->get("mapfile", Json::nullValue).isString())
+                {
                     std::string mapfile = req->get("mapfile", Json::nullValue).asString();
 
+#ifdef _WIN32
+                    // ------------------------------------------------
+                    // Windows: Open existing named file mapping object
+                    // ------------------------------------------------
+                    hMapFile = OpenFileMappingA(
+                        FILE_MAP_WRITE,   // read/write access
+                        FALSE,            // do not inherit
+                        mapfile.c_str()); // name of mapping object
+
+                    if (!hMapFile)
+                    {
+                        std::cout << "Failed to open mapfile: " << mapfile
+                                  << " GetLastError=" << GetLastError() << std::endl;
+                        callback(drogon::HttpResponse::newHttpResponse(
+                            drogon::k400BadRequest, drogon::ContentType::CT_TEXT_HTML));
+                        return;
+                    }
+
+                    mapptr = MapViewOfFile(
+                        hMapFile,       // handle to mapping object
+                        FILE_MAP_WRITE, // read/write permission
+                        0, 0,           // offset high/low
+                        mapfile_size);  // number of bytes to map
+
+                    if (!mapptr)
+                    {
+                        std::cout << "Failed to MapViewOfFile: " << mapfile
+                                  << " GetLastError=" << GetLastError() << std::endl;
+                        CloseHandle(hMapFile);
+                        callback(drogon::HttpResponse::newHttpResponse(
+                            drogon::k400BadRequest, drogon::ContentType::CT_TEXT_HTML));
+                        return;
+                    }
+
+#else
+                    // ------------------------------------------
+                    // Linux/macOS: Use shm_open + mmap
+                    // ------------------------------------------
+                    // Try to open existing shared memory object
                     mapfd = shm_open(mapfile.c_str(), O_RDWR, 0);
-                    if (mapfd == -1) {
-                        std::cout << "Failed to open mapfile: " << mapfile << std::endl;
-                        callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                drogon::ContentType::CT_TEXT_HTML));
+                    if (mapfd == -1)
+                    {
+                        std::cout << "Failed to open mapfile: " << mapfile << " "
+                                  << strerror(errno) << std::endl;
+                        callback(drogon::HttpResponse::newHttpResponse(
+                            drogon::k400BadRequest, drogon::ContentType::CT_TEXT_HTML));
                         return;
                     }
 
                     mapptr = mmap(nullptr, mapfile_size, PROT_WRITE, MAP_SHARED, mapfd, 0);
-                    if (mapptr == MAP_FAILED) {
-                        std::cout << "Failed to mmap mapfile: " << mapfile << " " << strerror(errno) << std::endl;
+                    if (mapptr == MAP_FAILED)
+                    {
+                        std::cout << "Failed to mmap mapfile: " << mapfile << " "
+                                  << strerror(errno) << std::endl;
                         close(mapfd);
-                        callback(drogon::HttpResponse::newHttpResponse(drogon::k400BadRequest,
-                                drogon::ContentType::CT_TEXT_HTML));
+                        callback(drogon::HttpResponse::newHttpResponse(
+                            drogon::k400BadRequest, drogon::ContentType::CT_TEXT_HTML));
                         return;
                     }
+#endif // _WIN32
                 }
 
-
-                for (int i = 0; i < (int)variants.size(); ++i)
+                // ------------------------------------------------
+                // 3) For each variant, set up shader/uniform, etc.
+                // ------------------------------------------------
+                for (int i = 0; i < (int) variants.size(); ++i)
                 {
-                    if (variants[i].isObject())
+                    if (!variants[i].isObject())
+                        continue;
+
+                    // Set shaders if needed
+                    if (variants[i].isMember("shaders"))
                     {
-                        if (variants[i].isMember("shaders")) {
-                            if (set_shader_from_json(variants[i]["shaders"])->statusCode() != drogon::k200OK) {
-                                continue;
-                            }
+                        auto result = set_shader_from_json(variants[i]["shaders"]);
+                        if (result->statusCode() != drogon::k200OK)
+                        {
+                            continue;
                         }
-
-                        if (variants[i].isMember("uniforms")) {
-                            if (set_uniforms_from_json(variants[i]["uniforms"])->statusCode() != drogon::k200OK) {
-                                continue;
-                            }
-                        }
-
-                        auto imgdata = viewer->getNextRender(w, h);
-                        Json::Value img = Json::objectValue;
-                        img["width"] = imgdata->getWidth();
-                        img["height"] = imgdata->getHeight();
-                        img["offset"] = offset;
-
-                        size_t bytesize = imgdata->getWidth() * imgdata->getHeight() * 3;
-                        if (mapptr) {
-                            memcpy((char*)mapptr + offset, imgdata->getResourceBuffer(), bytesize);
-                        } else {
-                            img["data"] = drogon::utils::base64Encode(
-                                (const unsigned char*)imgdata->getResourceBuffer(), bytesize);
-                        }
-
-                        offset += bytesize;
-                        response.append(img);
                     }
+
+                    // Set uniforms if needed
+                    if (variants[i].isMember("uniforms"))
+                    {
+                        auto result = set_uniforms_from_json(variants[i]["uniforms"]);
+                        if (result->statusCode() != drogon::k200OK)
+                        {
+                            continue;
+                        }
+                    }
+
+                    // Grab the rendered image data
+                    auto imgdata = viewer->getNextRender(w, h);
+
+                    // Build a JSON entry for this variant
+                    Json::Value img = Json::objectValue;
+                    img["width"] = (Json::UInt) imgdata->getWidth();
+                    img["height"] = (Json::UInt) imgdata->getHeight();
+                    img["offset"] = (Json::UInt64) offset;
+
+                    size_t bytesize = imgdata->getWidth() * imgdata->getHeight() * 3;
+
+                    if (mapptr)
+                    {
+                        // Write into shared memory
+                        memcpy((char*) mapptr + offset, imgdata->getResourceBuffer(), bytesize);
+                    }
+                    else
+                    {
+                        // Base64-encode inline
+                        img["data"] = drogon::utils::base64Encode(
+                            (const unsigned char*) imgdata->getResourceBuffer(), bytesize);
+                    }
+
+                    offset += bytesize;
+                    response.append(img);
                 }
 
-                if (mapptr) {
+                // -------------------------------------------
+                // 4) If using shared memory, unmap/close it
+                // -------------------------------------------
+                if (mapptr)
+                {
+#ifdef _WIN32
+                    // Optionally flush the view
+                    FlushViewOfFile(mapptr, mapfile_size);
+
+                    UnmapViewOfFile(mapptr);
+
+                    // If we used OpenFileMapping, store the HANDLE somewhere to close?
+                    // If you created a local hMapFile above, keep it in scope to close here:
+                    CloseHandle(hMapFile);
+
+#else
                     msync(mapptr, mapfile_size, MS_SYNC);
                     munmap(mapptr, mapfile_size);
                     close(mapfd);
+#endif
                 }
 
+                // Send the final JSON array with all variants
                 callback(drogon::HttpResponse::newHttpJsonResponse(response));
-            } else
+            }
+            else
             {
-                // single screenshot, older interface
+                // --------------------------
+                // Single screenshot (legacy)
+                // --------------------------
                 auto img = viewer->getNextRender(w, h);
                 auto resp = drogon::HttpResponse::newHttpResponse();
                 resp->setContentTypeCode(drogon::CT_CUSTOM);
+
                 int width = img->getWidth();
                 int height = img->getHeight();
-
                 resp->addCookie("width", std::to_string(width));
                 resp->addCookie("height", std::to_string(height));
-                unsigned char* data = (unsigned char*)img->getResourceBuffer();
+
+                unsigned char* data = (unsigned char*) img->getResourceBuffer();
                 resp->setBody(std::string(data, data + width * height * 3));
+
                 callback(resp);
             }
         });
     }
+
 
     void metrics(const drogon::HttpRequestPtr& _req,
             std::function<void (const drogon::HttpResponsePtr &)> &&callback) {
@@ -743,7 +858,7 @@ class Server {
     void main_loop(ng::ref<Viewer> viewer, int port) {
         reset_sigint_handler = std::thread([=] () {
             while (!drogon::app().isRunning() && main_running) {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
             std::signal(SIGINT, handle_signal);

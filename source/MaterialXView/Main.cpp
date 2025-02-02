@@ -114,6 +114,7 @@ int main(int argc, char* const argv[])
     bool enableDoubleSidedByDefault = true;
     bool disableMaterialUniforms = false;
     bool enableLookAt = false;
+    int hideUI = 0;
 
     for (size_t i = 0; i < tokens.size(); i++)
     {
@@ -190,6 +191,9 @@ int main(int argc, char* const argv[])
         else if (token == "--shadowMap")
         {
             parseToken(nextToken, "boolean", shadowMap);
+        }
+        else if (token == "--hideUI") {
+            parseToken(nextToken, "integer", hideUI);
         }
         else if (token == "--path")
         {
@@ -355,9 +359,15 @@ int main(int argc, char* const argv[])
             viewer->set_visible(true);
         }
 
+        if (hideUI) 
+        {
+            viewer->hideUI();
+        }
+
         {
             Server webServer;
             webServer.start_server(viewer, serverPort, disableMaterialUniforms, enableLookAt);
+            
             ng::mainloop(refresh);
         }
     }

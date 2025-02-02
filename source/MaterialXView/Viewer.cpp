@@ -5,7 +5,10 @@
 
 #include <MaterialXView/Viewer.h>
 #include <MaterialXView/RenderPipeline.h>
-#include <unistd.h>
+
+#include <chrono>
+#include <thread>
+
 
 #ifdef MATERIALXVIEW_METAL_BACKEND
 #include <MaterialXView/RenderPipelineMetal.h>
@@ -2071,10 +2074,11 @@ GLuint64 Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
     // Resize first
     while (getSize(m_glfw_window) != nanogui::Vector2i(width, height)) {
         this->set_size({width, height});
+        
         // Make sure to request redraw, so that draw_all() actually does something
         this->redraw();
         this->draw_all();
-        usleep(1000);
+        std::this_thread::sleep_for(std::chrono::microseconds(1000));
     }
 
     this->warmup_counter = warmup;
@@ -2575,7 +2579,7 @@ mx::ImagePtr Viewer::getNextRender(int width, int height)
 
         if (this->requestedRenderResolution.has_value()) {
             // Wait for GLFW to resize the window to the appropriate size
-            usleep(100);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
 
