@@ -131,6 +131,8 @@ else()
 endif()
 message(STATUS "Setting namespace to '${MATERIALX_NAMESPACE}'")
 
+
+
 # Library name custom suffix
 # This helps an application that needs to ship a dynamic library MaterialX ensure
 # that it has a unique name that won't conflict with one elsewhere on the system.
@@ -243,6 +245,7 @@ endif()
 
 # Adjust compiler settings
 if(MSVC)
+    add_compile_options(/FS)
     add_compile_options(/MP)
     if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
         string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")

@@ -157,42 +157,42 @@ set_target_properties(
 # -----------------------------------------------------------
 # 2) Optional: In case you want to convert env var up front:
 # -----------------------------------------------------------
-if (DEFINED ENV{VCPKG_PATH})
-    set(VCPKG_ROOT "$ENV{VCPKG_PATH}")
-    # Convert backslashes "\" to forward slashes "/"
-    string(REPLACE "\\" "/" VCPKG_ROOT "${VCPKG_ROOT}")
-    message(STATUS "VCPKG_ROOT is now: ${VCPKG_ROOT}")
-else()
-    message(WARNING
-        "VCPKG_PATH environment variable is not set. "
-        "If you rely on vcpkg dlls, this might fail.")
-endif()
+# if (DEFINED ENV{VCPKG_PATH})
+#     set(VCPKG_ROOT "$ENV{VCPKG_PATH}")
+#     # Convert backslashes "\" to forward slashes "/"
+#     string(REPLACE "\\" "/" VCPKG_ROOT "${VCPKG_ROOT}")
+#     message(STATUS "VCPKG_ROOT is now: ${VCPKG_ROOT}")
+# else()
+#     message(WARNING
+#         "VCPKG_PATH environment variable is not set. "
+#         "If you rely on vcpkg dlls, this might fail.")
+# endif()
 
 # -----------------------------------------------------------
 # 3) Windows-only logic for copying DLLs after build
-# -----------------------------------------------------------
-if (WIN32)
-    if (NOT DEFINED ENV{VCPKG_PATH})
-        message(FATAL_ERROR "VCPKG_PATH not set!")
-    endif()
+# # -----------------------------------------------------------
+# if (WIN32)
+#     if (NOT DEFINED ENV{VCPKG_PATH})
+#         message(FATAL_ERROR "VCPKG_PATH not set!")
+#     endif()
 
-    set(VCPKG_ROOT "$ENV{VCPKG_PATH}")
-    string(REPLACE "\\" "/" VCPKG_ROOT "${VCPKG_ROOT}")
+#     set(VCPKG_ROOT "$ENV{VCPKG_PATH}")
+#     string(REPLACE "\\" "/" VCPKG_ROOT "${VCPKG_ROOT}")
 
-    add_custom_command(TARGET MaterialXView POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "$<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/installed/x64-windows/debug/bin/jsoncpp.dll,${VCPKG_ROOT}/installed/x64-windows/bin/jsoncpp.dll>"
-            "$<TARGET_FILE_DIR:MaterialXView>"
-        COMMENT "Copying jsoncpp.dll from vcpkg after build"
-    )
+#     add_custom_command(TARGET MaterialXView POST_BUILD
+#         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+#             "$<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/installed/x64-windows/debug/bin/jsoncpp.dll,${VCPKG_ROOT}/installed/x64-windows/bin/jsoncpp.dll>"
+#             "$<TARGET_FILE_DIR:MaterialXView>"
+#         COMMENT "Copying jsoncpp.dll from vcpkg after build"
+#     )
 
-    add_custom_command(TARGET MaterialXView POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "$<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/installed/x64-windows/debug/bin/zlib1.dll,${VCPKG_ROOT}/installed/x64-windows/bin/zlib1.dll>"
-            "$<TARGET_FILE_DIR:MaterialXView>"
-        COMMENT "Copying zlib1.dll from vcpkg after build"
-    )
-endif()
+#     add_custom_command(TARGET MaterialXView POST_BUILD
+#         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+#             "$<IF:$<CONFIG:Debug>,${VCPKG_ROOT}/installed/x64-windows/debug/bin/zlib1.dll,${VCPKG_ROOT}/installed/x64-windows/bin/zlib1.dll>"
+#             "$<TARGET_FILE_DIR:MaterialXView>"
+#         COMMENT "Copying zlib1.dll from vcpkg after build"
+#     )
+# endif()
 
 
 install(TARGETS MaterialXView
