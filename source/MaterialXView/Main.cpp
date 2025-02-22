@@ -116,6 +116,7 @@ int main(int argc, char* const argv[])
     bool enableLookAt = false;
     int hideUI = 0;
 
+
     for (size_t i = 0; i < tokens.size(); i++)
     {
         const std::string& token = tokens[i];

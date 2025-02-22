@@ -2072,7 +2072,9 @@ nanogui::Vector2i getSize(GLFWwindow *window)
 GLuint64 Viewer::runBenchmark(int warmup, int overdraw, int width, int height)
 {
     // Resize first
+    m_pixel_ratio = 1.0;
     while (getSize(m_glfw_window) != nanogui::Vector2i(width, height)) {
+
         this->set_size({width, height});
         
         // Make sure to request redraw, so that draw_all() actually does something
